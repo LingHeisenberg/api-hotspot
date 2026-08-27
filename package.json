@@ -1,0 +1,21 @@
+{
+  "name": "eyazs-hotspot-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/index.js",
+    "start": "node src/index.js",
+    "db:setup": "node src/scripts/setupDatabase.js",
+    "vouchers:generate": "node src/scripts/generateVouchers.js",
+    "vouchers:sync": "node src/scripts/syncVouchers.js",
+    "vouchers:stock": "node src/scripts/voucherStock.js",
+    "profiles:sync": "node src/scripts/syncProfiles.js",
+    "hotspot:setup": "node src/scripts/setupHotspot.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mysql2": "^3.11.5"
+  }
+}
