@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "node src/index.js",
     "start": "node src/index.js",
@@ -11,9 +14,12 @@
     "vouchers:sync": "node src/scripts/syncVouchers.js",
     "vouchers:stock": "node src/scripts/voucherStock.js",
     "profiles:sync": "node src/scripts/syncProfiles.js",
-    "hotspot:setup": "node src/scripts/setupHotspot.js"
+    "hotspot:setup": "node src/scripts/setupHotspot.js",
+    "hotspot:diagnose": "node src/scripts/diagnoseHotspot.js"
   },
   "dependencies": {
+    "axios": "^1.20.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "mysql2": "^3.11.5"

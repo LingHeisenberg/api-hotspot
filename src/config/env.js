@@ -29,6 +29,13 @@ function required(name) {
   return value;
 }
 
+function listFromEnv(value) {
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function getDatabaseConfig() {
   const rawUrl = isProduction
     ? required('DB_URL')
@@ -70,13 +77,24 @@ function getDatabaseConfig() {
 export const env = {
   production: isProduction,
 
-  port: Number(process.env.PORT || 3000),
+  port: Number(process.env.PORT || 8000),
+
+  cors: {
+    origins: listFromEnv(
+      process.env.CORS_ORIGINS ||
+        process.env.FRONTEND_URL ||
+        process.env.FRONTEND_PUBLIC_URL ||
+        process.env.PORTAL_PUBLIC_URL ||
+        ''
+    )
+  },
 
   portal: {
     publicUrl: isProduction
-      ? required('PORTAL_PUBLIC_URL')
-      : process.env.PORTAL_PUBLIC_URL ||
-        `http://localhost:${process.env.PORT || 3000}/`
+      ? process.env.FRONTEND_PUBLIC_URL || required('PORTAL_PUBLIC_URL')
+      : process.env.FRONTEND_PUBLIC_URL ||
+        process.env.PORTAL_PUBLIC_URL ||
+        'http://localhost:5173/'
   },
 
   db: getDatabaseConfig(),

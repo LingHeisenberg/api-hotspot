@@ -61,3 +61,8 @@ Thumbs.db
 *.bak
 *.backup
 *.sql
+.env
+.env.local
+.env.production
+node_modules/
+dist/

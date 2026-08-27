@@ -3,7 +3,7 @@ import { env } from '../config/env.js';
 import { pool } from '../config/db.js';
 import { createReference, detectProvider, normalizePhone, sanitizeHotspotValue } from '../utils/validators.js';
 import { EMOLA_UNAVAILABLE_MESSAGE, startWalletPayment } from '../services/paymentService.js';
-import { activateHotspotClient } from '../services/mikrotikService.js';
+import { activateHotspotClient, checkHotspotReadiness } from '../services/mikrotikService.js';
 
 const router = Router();
 
@@ -38,6 +38,17 @@ router.post('/', async (req, res, next) => {
       message:
         'Abra esta pagina a partir do Wi-Fi Hotspot antes de pagar. Sem IP/MAC do MikroTik o acesso nao pode ser libertado automaticamente.'
     });
+  }
+
+  if (env.payment.mode === 'live' && env.mikrotik.syncEnabled) {
+    const readiness = await checkHotspotReadiness();
+
+    if (!readiness.ok) {
+      return res.status(503).json({
+        message: readiness.message,
+        reason: 'hotspot_not_ready'
+      });
+    }
   }
 
   const connection = await pool.getConnection();
@@ -199,7 +210,9 @@ router.get('/:reference/status', async (req, res, next) => {
     }
 
     if (voucher.status === 'pago' || voucher.status === 'usado') {
-      if (voucher.status === 'pago') {
+      const activated = Boolean(activation?.ok || voucher.mikrotik_login_at);
+
+      if (voucher.status === 'pago' && activated) {
         await pool.execute(
           `UPDATE vouchers
            SET status = 'usado', usado_em = NOW()
@@ -214,7 +227,7 @@ router.get('/:reference/status', async (req, res, next) => {
         senha: voucher.senha_voucher,
         mikrotikLoginUrl: env.mikrotik.loginUrl,
         access: {
-          activated: Boolean(activation?.ok || voucher.mikrotik_login_at),
+          activated,
           autoLoginAvailable: Boolean(voucher.ip_cliente || voucher.mac_cliente),
           message:
             activation?.message ||

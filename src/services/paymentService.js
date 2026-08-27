@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { env } from '../config/env.js';
 import { detectProvider } from '../utils/validators.js';
 
@@ -62,33 +63,26 @@ async function startMpesaPayment({ amount, phone, reference }) {
   };
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), env.payment.mpesa.timeoutMs);
-
-    const response = await fetch(env.payment.mpesa.apiUrl, {
-      method: 'POST',
+    const response = await axios.post(env.payment.mpesa.apiUrl, payload, {
+      timeout: env.payment.mpesa.timeoutMs,
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json'
       },
-      body: JSON.stringify(payload),
-      signal: controller.signal
+      validateStatus: () => true
     });
 
-    clearTimeout(timeout);
-
-    const text = await response.text();
-    const data = parseJson(text);
+    const data = response.data;
     const status = classifyPaymentResponse(data, response.status, 'M-Pesa');
 
-    if (!response.ok || status.kind === 'failed' || status.kind === 'insufficient_funds') {
+    if (response.status < 200 || response.status >= 300 || status.kind === 'failed' || status.kind === 'insufficient_funds') {
       return {
         accepted: false,
         provider: 'mpesa',
         paymentStatus: status.kind,
         reason: status.kind,
         message: status.message || extractMessage(data) || `M-Pesa recusou o pedido. HTTP ${response.status}.`,
-        raw: data || text,
+        raw: data,
         requestPayload: payload
       };
     }
@@ -98,14 +92,17 @@ async function startMpesaPayment({ amount, phone, reference }) {
       provider: 'mpesa',
       paymentStatus: status.kind,
       message: extractMessage(data) || status.message,
-      raw: data || text,
+      raw: data,
       requestPayload: payload
     };
   } catch (error) {
     return {
       accepted: false,
       provider: 'mpesa',
-      message: error.name === 'AbortError' ? 'Tempo limite ao contactar a API M-Pesa.' : 'Erro de comunicacao com a API M-Pesa.',
+      message:
+        error.code === 'ECONNABORTED'
+          ? 'Tempo limite ao contactar a API M-Pesa.'
+          : 'Erro de comunicacao com a API M-Pesa.',
       raw: { error: error.message },
       requestPayload: payload
     };

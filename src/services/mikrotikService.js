@@ -189,6 +189,58 @@ export async function findHotspotHost({ ip, mac }) {
   };
 }
 
+export async function checkHotspotReadiness() {
+  if (!env.mikrotik.syncEnabled) {
+    return {
+      ok: false,
+      message: 'Sincronizacao com MikroTik esta desativada.'
+    };
+  }
+
+  if (!env.mikrotik.restUrl || !env.mikrotik.apiUser) {
+    return {
+      ok: false,
+      message: 'Configuracao REST do MikroTik incompleta.'
+    };
+  }
+
+  const users = await requestMikrotik(env.mikrotik.restUrl, { method: 'GET' });
+
+  if (!users.ok) {
+    return {
+      ok: false,
+      message: `REST do MikroTik indisponivel: ${users.message}`
+    };
+  }
+
+  const servers = await requestMikrotik(getMikrotikRestUrl('/ip/hotspot'), { method: 'GET' });
+
+  if (!servers.ok) {
+    return {
+      ok: false,
+      message: `Nao foi possivel confirmar o servidor Hotspot: ${servers.message}`
+    };
+  }
+
+  const activeServers = Array.isArray(servers.data)
+    ? servers.data.filter((server) => String(server.disabled || 'false') !== 'true')
+    : [];
+
+  if (activeServers.length === 0) {
+    return {
+      ok: false,
+      message:
+        'O MikroTik REST esta acessivel, mas este router nao tem servidor Hotspot ativo em /ip/hotspot. Configure o Hotspot neste router ou aponte MIKROTIK_REST_URL para o router correto antes de cobrar.'
+    };
+  }
+
+  return {
+    ok: true,
+    users: Array.isArray(users.data) ? users.data.length : 0,
+    hotspotServers: activeServers.length
+  };
+}
+
 export async function ensureWalledGardenAccess({ host, port }) {
   if (!host) {
     return {
@@ -381,7 +433,7 @@ async function saveHotspotUser(payload, method, url, knownId = '') {
   };
 }
 
-async function requestMikrotik(url, options = {}) {
+export async function requestMikrotik(url, options = {}) {
   const credentials = Buffer.from(`${env.mikrotik.apiUser}:${env.mikrotik.apiPass}`).toString('base64');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), env.mikrotik.timeoutMs);
@@ -422,14 +474,14 @@ async function requestMikrotik(url, options = {}) {
       ok: false,
       message:
         error.name === 'AbortError'
-          ? 'Tempo limite ao criar usuário no MikroTik.'
+          ? 'Tempo limite ao comunicar com MikroTik.'
           : `Falha ao comunicar com MikroTik: ${error.message}`,
       raw: { error: error.message }
     };
   }
 }
 
-function getMikrotikRestUrl(path) {
+export function getMikrotikRestUrl(path) {
   const marker = '/rest/';
   const index = env.mikrotik.restUrl.indexOf(marker);
 

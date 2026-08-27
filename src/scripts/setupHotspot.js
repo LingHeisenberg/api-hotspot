@@ -3,7 +3,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  downloadHotspotLoginToRouter,
   ensureWalledGardenAccess,
   uploadRouterFileContents
 } from '../services/mikrotikService.js';
@@ -26,28 +25,18 @@ if (garden.ok) {
   console.log(`FALHA walled-garden: ${garden.message}`);
 }
 
-const loginUrl = new URL('/hotspot/login.html', portalUrl).href;
-const login = await downloadHotspotLoginToRouter({
-  sourceUrl: loginUrl,
-  dstPath: 'hotspot/login.html'
+const htmlTemplate = await fs.readFile(path.join(projectRoot, 'mikrotik', 'login.html'), 'utf8');
+const html = htmlTemplate.replaceAll('__PORTAL_PUBLIC_URL__', portalUrl.href);
+
+const upload = await uploadRouterFileContents({
+  dstPath: 'hotspot/login.html',
+  contents: html
 });
-const html = await fs.readFile(path.join(projectRoot, 'mikrotik', 'login.html'), 'utf8');
 
-if (login.ok) {
-  console.log(`OK login.html copiado para o MikroTik a partir de ${loginUrl}`);
+if (upload.ok) {
+  console.log(`OK login.html enviado por REST file/set (${upload.key}=${upload.target})`);
 } else {
-  console.log(`FALHA login.html: ${login.message}`);
-
-  const upload = await uploadRouterFileContents({
-    dstPath: 'hotspot/login.html',
-    contents: html
-  });
-
-  if (upload.ok) {
-    console.log(`OK login.html enviado por REST file/set (${upload.key}=${upload.target})`);
-  } else {
-    console.log(`FALHA upload login.html: ${upload.message}`);
-  }
+  console.log(`FALHA upload login.html: ${upload.message}`);
 }
 
 const flashUpload = await uploadRouterFileContents({
