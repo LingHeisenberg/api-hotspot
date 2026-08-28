@@ -97,6 +97,13 @@ export const env = {
         'http://localhost:5173/'
   },
 
+  api: {
+    publicUrl:
+      process.env.API_PUBLIC_URL ||
+      process.env.BACKEND_PUBLIC_URL ||
+      `http://localhost:${process.env.PORT || 8000}/`
+  },
+
   db: getDatabaseConfig(),
 
   admin: {
@@ -142,6 +149,12 @@ export const env = {
         process.env.MIKROTIK_REQUIRE_HOTSPOT_CONTEXT,
         true
       ),
+
+    walledGardenUrls:
+      listFromEnv(process.env.MIKROTIK_WALLED_GARDEN_URLS),
+
+    walledGardenAllowHttp:
+      boolFromEnv(process.env.MIKROTIK_WALLED_GARDEN_ALLOW_HTTP, true),
 
     timeoutMs:
       Number(process.env.MIKROTIK_TIMEOUT_MS || 15000)

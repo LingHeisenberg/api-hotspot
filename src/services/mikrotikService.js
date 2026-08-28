@@ -277,9 +277,10 @@ export async function ensureWalledGardenAccess({ host, port }) {
   }
 
   const match = existing.data.find((item) => {
-    const sameHost = item['dst-address'] === payload['dst-address'] || item['dst-host'] === payload['dst-host'];
+    const sameAddress = payload['dst-address'] && item['dst-address'] === payload['dst-address'];
+    const sameHost = payload['dst-host'] && item['dst-host'] === payload['dst-host'];
     const samePort = !payload['dst-port'] || item['dst-port'] === payload['dst-port'];
-    return sameHost && samePort;
+    return (sameAddress || sameHost) && samePort;
   });
 
   const method = match?.['.id'] ? 'PATCH' : 'PUT';

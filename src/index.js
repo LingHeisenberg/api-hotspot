@@ -61,6 +61,10 @@ app.use(
         return callback(null, true);
       }
 
+      if (isLocalDevelopmentOrigin(origin)) {
+        return callback(null, true);
+      }
+
       /*
        * Permite tudo caso tenha *
        */
@@ -308,3 +312,9 @@ app.listen(
 
   }
 );
+
+function isLocalDevelopmentOrigin(origin) {
+  if (env.production) return false;
+
+  return /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d+$/i.test(origin);
+}

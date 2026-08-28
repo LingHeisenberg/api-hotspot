@@ -12,17 +12,21 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..', '..', '..');
 
 const portalUrl = new URL(env.portal.publicUrl);
-const host = portalUrl.hostname;
-const port = portalUrl.port || (portalUrl.protocol === 'https:' ? '443' : '80');
+const walledGardenTargets = getWalledGardenTargets();
 
 console.log(`Portal publico: ${portalUrl.href}`);
+console.log(`API publica: ${env.api.publicUrl}`);
 
-const garden = await ensureWalledGardenAccess({ host, port });
+for (const target of walledGardenTargets) {
+  const host = target.hostname;
+  const port = target.port;
+  const garden = await ensureWalledGardenAccess({ host, port });
 
-if (garden.ok) {
-  console.log(`OK walled-garden: ${host}:${port}`);
-} else {
-  console.log(`FALHA walled-garden: ${garden.message}`);
+  if (garden.ok) {
+    console.log(`OK walled-garden: ${host}:${port}`);
+  } else {
+    console.log(`FALHA walled-garden ${host}:${port}: ${garden.message}`);
+  }
 }
 
 const htmlTemplate = await fs.readFile(path.join(projectRoot, 'mikrotik', 'login.html'), 'utf8');
@@ -51,3 +55,28 @@ if (flashUpload.ok) {
 }
 
 console.log('Setup Hotspot concluido.');
+
+function getWalledGardenTargets() {
+  const urls = [env.portal.publicUrl, env.api.publicUrl, ...env.mikrotik.walledGardenUrls];
+  const unique = new Map();
+
+  for (const rawUrl of urls) {
+    try {
+      const url = new URL(rawUrl);
+      const port = url.port || (url.protocol === 'https:' ? '443' : '80');
+      addTarget(unique, url.hostname, port);
+
+      if (env.mikrotik.walledGardenAllowHttp && port === '443') {
+        addTarget(unique, url.hostname, '80');
+      }
+    } catch {
+      console.log(`IGNORADO walled-garden URL invalida: ${rawUrl}`);
+    }
+  }
+
+  return [...unique.values()];
+}
+
+function addTarget(unique, hostname, port) {
+  unique.set(`${hostname}:${port}`, { hostname, port });
+}
