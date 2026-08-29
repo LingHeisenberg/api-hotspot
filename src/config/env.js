@@ -201,6 +201,10 @@ export const env = {
       timeoutMs:
         Number(process.env.MPESA_TIMEOUT_MS || 45000),
 
+      msisdnFormat:
+        process.env.MPESA_MSISDN_FORMAT ||
+        'local',
+
       msisdnPrefix:
         process.env.MPESA_MSISDN_PREFIX || '258',
 

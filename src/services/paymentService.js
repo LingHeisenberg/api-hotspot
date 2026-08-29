@@ -57,7 +57,10 @@ async function startMpesaPayment({ amount, phone, reference }) {
 
   const payload = {
     transaction_ref: reference,
-    msisdn: withCountryPrefix(phone, env.payment.mpesa.msisdnPrefix),
+    msisdn: formatMsisdn(phone, {
+      format: env.payment.mpesa.msisdnFormat,
+      prefix: env.payment.mpesa.msisdnPrefix
+    }),
     amount: Number(amount),
     thirdparty_ref: reference
   };
@@ -74,6 +77,7 @@ async function startMpesaPayment({ amount, phone, reference }) {
 
     const data = response.data;
     const status = classifyPaymentResponse(data, response.status, 'M-Pesa');
+    const apiMessage = extractMessage(data);
 
     if (response.status < 200 || response.status >= 300 || status.kind === 'failed' || status.kind === 'insufficient_funds') {
       return {
@@ -81,7 +85,7 @@ async function startMpesaPayment({ amount, phone, reference }) {
         provider: 'mpesa',
         paymentStatus: status.kind,
         reason: status.kind,
-        message: status.message || extractMessage(data) || `M-Pesa recusou o pedido. HTTP ${response.status}.`,
+        message: apiMessage || status.message || `M-Pesa recusou o pedido. HTTP ${response.status}.`,
         raw: data,
         requestPayload: payload
       };
@@ -91,7 +95,7 @@ async function startMpesaPayment({ amount, phone, reference }) {
       accepted: true,
       provider: 'mpesa',
       paymentStatus: status.kind,
-      message: extractMessage(data) || status.message,
+      message: apiMessage || status.message,
       raw: data,
       requestPayload: payload
     };
@@ -188,6 +192,25 @@ function withCountryPrefix(phone, prefix) {
   }
 
   return `${prefix}${digits}`;
+}
+
+function formatMsisdn(phone, { format = 'local', prefix = '258' } = {}) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  const normalizedFormat = String(format || 'local').toLowerCase();
+
+  if (normalizedFormat === 'international' || normalizedFormat === 'country-prefix') {
+    return withCountryPrefix(digits, prefix || '258');
+  }
+
+  if (normalizedFormat === 'raw') {
+    return digits;
+  }
+
+  if (prefix && digits.startsWith(prefix) && digits.length > 9) {
+    return digits.slice(prefix.length);
+  }
+
+  return digits.slice(-9);
 }
 
 function parseJson(text) {
