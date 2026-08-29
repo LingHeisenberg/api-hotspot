@@ -4,99 +4,232 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const backendRoot = path.resolve(__dirname, '..', '..');
 
-dotenv.config({ path: path.join(backendRoot, '.env') });
+const backendRoot = path.resolve(
+  __dirname,
+  '..',
+  '..'
+);
+
+/*
+ * Carrega primeiro o .env da pasta backend.
+ */
+dotenv.config({
+  path: path.join(
+    backendRoot,
+    '.env'
+  )
+});
+
 dotenv.config();
 
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction =
+  process.env.NODE_ENV === 'production';
 
+
+/*
+ * Converte variáveis true/false.
+ *
+ * Aceita:
+ * true
+ * 1
+ * yes
+ * sim
+ */
 function boolFromEnv(value, fallback) {
-  if (value === undefined) return fallback;
+  if (value === undefined) {
+    return fallback;
+  }
 
-  return ['1', 'true', 'yes', 'sim'].includes(
-    String(value).toLowerCase()
+  return [
+    '1',
+    'true',
+    'yes',
+    'sim'
+  ].includes(
+    String(value)
+      .toLowerCase()
+      .trim()
   );
 }
 
+
+/*
+ * Variáveis obrigatórias em produção.
+ */
 function required(name) {
-  const value = process.env[name];
+  const value =
+    process.env[name];
 
   if (!value) {
-    throw new Error(`Variável obrigatória não definida: ${name}`);
+    throw new Error(
+      `Variável obrigatória não definida: ${name}`
+    );
   }
 
   return value;
 }
 
+
+/*
+ * Converte:
+ *
+ * dominio1.com,dominio2.com
+ *
+ * em array.
+ */
 function listFromEnv(value) {
   return String(value || '')
     .split(',')
-    .map((item) => item.trim())
+    .map(
+      (item) => item.trim()
+    )
     .filter(Boolean);
 }
 
+
+/*
+ * Configuração MySQL.
+ */
 function getDatabaseConfig() {
-  const rawUrl = isProduction
-    ? required('DB_URL')
-    : process.env.DB_URL || 'mysql://root@localhost:3306/eyazs_bd';
+  const rawUrl =
+    isProduction
+      ? required('DB_URL')
+      : process.env.DB_URL ||
+        'mysql://root@localhost:3306/eyazs_bd';
 
   let url;
 
   try {
     url = new URL(rawUrl);
   } catch {
-    throw new Error('DB_URL inválida.');
+    throw new Error(
+      'DB_URL inválida.'
+    );
   }
 
-  const database = decodeURIComponent(
-    url.pathname.replace(/^\/+/, '')
-  );
+  const database =
+    decodeURIComponent(
+      url.pathname.replace(
+        /^\/+/,
+        ''
+      )
+    );
 
   if (!database) {
-    throw new Error('DB_URL deve conter o nome da base de dados.');
+    throw new Error(
+      'DB_URL deve conter o nome da base de dados.'
+    );
   }
 
   return {
-    host: url.hostname,
-    port: Number(url.port || 3306),
+    host:
+      url.hostname,
+
+    port:
+      Number(
+        url.port || 3306
+      ),
+
     database,
-    user: decodeURIComponent(url.username),
-    password: decodeURIComponent(url.password),
 
-    waitForConnections: true,
-    connectionLimit: Number(process.env.DB_POOL_LIMIT || 10),
-    queueLimit: 0,
-    decimalNumbers: true,
+    user:
+      decodeURIComponent(
+        url.username
+      ),
 
-    enableKeepAlive: true,
-    keepAliveInitialDelay: 0
+    password:
+      decodeURIComponent(
+        url.password
+      ),
+
+    waitForConnections:
+      true,
+
+    connectionLimit:
+      Number(
+        process.env.DB_POOL_LIMIT ||
+        10
+      ),
+
+    queueLimit:
+      0,
+
+    decimalNumbers:
+      true,
+
+    enableKeepAlive:
+      true,
+
+    keepAliveInitialDelay:
+      0
   };
 }
 
+
+/*
+ * Configuração central da aplicação.
+ */
 export const env = {
-  production: isProduction,
 
-  port: Number(process.env.PORT || 8000),
+  /*
+   * Ambiente
+   */
+  production:
+    isProduction,
 
+
+  /*
+   * Porta da API.
+   *
+   * No Railway, process.env.PORT
+   * será utilizado automaticamente.
+   */
+  port:
+    Number(
+      process.env.PORT ||
+      8000
+    ),
+
+
+  /*
+   * CORS
+   */
   cors: {
-    origins: listFromEnv(
-      process.env.CORS_ORIGINS ||
+    origins:
+      listFromEnv(
+        process.env.CORS_ORIGINS ||
         process.env.FRONTEND_URL ||
         process.env.FRONTEND_PUBLIC_URL ||
         process.env.PORTAL_PUBLIC_URL ||
         ''
-    )
+      )
   },
 
+
+  /*
+   * Portal público.
+   */
   portal: {
-    publicUrl: isProduction
-      ? process.env.FRONTEND_PUBLIC_URL || required('PORTAL_PUBLIC_URL')
-      : process.env.FRONTEND_PUBLIC_URL ||
-        process.env.PORTAL_PUBLIC_URL ||
-        'http://localhost:5173/'
+    publicUrl:
+      isProduction
+        ? (
+            process.env.FRONTEND_PUBLIC_URL ||
+            required(
+              'PORTAL_PUBLIC_URL'
+            )
+          )
+        : (
+            process.env.FRONTEND_PUBLIC_URL ||
+            process.env.PORTAL_PUBLIC_URL ||
+            'http://localhost:5173/'
+          )
   },
 
+
+  /*
+   * URL pública da API.
+   */
   api: {
     publicUrl:
       process.env.API_PUBLIC_URL ||
@@ -104,145 +237,384 @@ export const env = {
       `http://localhost:${process.env.PORT || 8000}/`
   },
 
-  db: getDatabaseConfig(),
 
+  /*
+   * MySQL
+   */
+  db:
+    getDatabaseConfig(),
+
+
+  /*
+   * Administrador.
+   */
   admin: {
-    password: isProduction
-      ? required('ADMIN_PASSWORD')
-      : process.env.ADMIN_PASSWORD || 'admin',
 
-    token: isProduction
-      ? required('ADMIN_TOKEN')
-      : process.env.ADMIN_TOKEN || 'dev-admin-token'
+    password:
+      isProduction
+        ? required(
+            'ADMIN_PASSWORD'
+          )
+        : (
+            process.env.ADMIN_PASSWORD ||
+            'admin'
+          ),
+
+    token:
+      isProduction
+        ? required(
+            'ADMIN_TOKEN'
+          )
+        : (
+            process.env.ADMIN_TOKEN ||
+            'dev-admin-token'
+          )
   },
+
+
+  /*
+   * =====================================
+   * SINCRONIZAÇÃO AUTOMÁTICA DE VOUCHERS
+   * =====================================
+   */
+voucherSync: {
+  enabled: boolFromEnv(
+    process.env.VOUCHER_AUTO_SYNC_ENABLED,
+    false
+  ),
+
+  intervalMs: Number(
+    process.env.VOUCHER_SYNC_INTERVAL_MS || 60000
+  )
+},
+
+voucherStock: {
+  enabled: boolFromEnv(
+    process.env.VOUCHER_AUTO_STOCK_ENABLED,
+    false
+  ),
+
+  intervalMs: Number(
+    process.env.VOUCHER_STOCK_INTERVAL_MS || 60000
+  )
+},
 
   mikrotik: {
+
+    /*
+     * Login acessível pelo cliente
+     * dentro da rede Hotspot.
+     */
     loginUrl:
-      process.env.MIKROTIK_LOGIN_URL ||
+      process.env
+        .MIKROTIK_LOGIN_URL ||
       'http://10.5.50.1/login',
 
+
+    /*
+     * REST utilizada pelo backend.
+     *
+     * Em produção o Railway deverá
+     * fornecer MIKROTIK_REST_URL.
+     */
     restUrl:
-      process.env.MIKROTIK_REST_URL ||
+      process.env
+        .MIKROTIK_REST_URL ||
       'http://10.5.50.1/rest/ip/hotspot/user',
 
+
+    /*
+     * Utilizador REST.
+     */
     apiUser:
-      process.env.MIKROTIK_API_USER ||
-      process.env.MIKROTIK_USER ||
+      process.env
+        .MIKROTIK_API_USER ||
+      process.env
+        .MIKROTIK_USER ||
       'admin',
 
+
+    /*
+     * Senha REST.
+     */
     apiPass:
-      process.env.MIKROTIK_API_PASS ||
-      process.env.MIKROTIK_PASS ||
+      process.env
+        .MIKROTIK_API_PASS ||
+      process.env
+        .MIKROTIK_PASS ||
       '',
 
-    hotspotServer:
-      process.env.MIKROTIK_HOTSPOT_SERVER || '',
 
+    /*
+     * Pode ser:
+     *
+     * all
+     *
+     * ou:
+     *
+     * hotspot1
+     */
+    hotspotServer:
+      process.env
+        .MIKROTIK_HOTSPOT_SERVER ||
+      '',
+
+
+    /*
+     * Ativa MySQL -> MikroTik.
+     */
     syncEnabled:
       boolFromEnv(
-        process.env.MIKROTIK_SYNC_ENABLED,
+        process.env
+          .MIKROTIK_SYNC_ENABLED,
         true
       ),
 
+
+    /*
+     * Exige IP/MAC do cliente
+     * quando compra no Hotspot.
+     */
     requireHotspotContext:
       boolFromEnv(
-        process.env.MIKROTIK_REQUIRE_HOTSPOT_CONTEXT,
+        process.env
+          .MIKROTIK_REQUIRE_HOTSPOT_CONTEXT,
         true
       ),
 
+
+    /*
+     * Se true, impede pagamento
+     * quando a RB estiver inacessível.
+     */
     blockPaymentIfOffline:
       boolFromEnv(
-        process.env.MIKROTIK_BLOCK_PAYMENT_IF_OFFLINE,
+        process.env
+          .MIKROTIK_BLOCK_PAYMENT_IF_OFFLINE,
         false
       ),
 
+
+    /*
+     * Login automático depois
+     * do pagamento.
+     *
+     * Esta variável precisa estar TRUE
+     * no Railway para libertar Internet
+     * automaticamente.
+     */
     autoLoginViaRest:
       boolFromEnv(
-        process.env.MIKROTIK_AUTO_LOGIN_VIA_REST,
+        process.env
+          .MIKROTIK_AUTO_LOGIN_VIA_REST,
         false
       ),
 
+
+    /*
+     * Compatibilidade com vouchers
+     * antigos do MySQL.
+     *
+     * Como agora usamos
+     * mikrotik_sync_status,
+     * em produção recomendo false.
+     */
     allowExistingDbVouchers:
       boolFromEnv(
-        process.env.MIKROTIK_ALLOW_EXISTING_DB_VOUCHERS,
+        process.env
+          .MIKROTIK_ALLOW_EXISTING_DB_VOUCHERS,
+        false
+      ),
+
+
+    /*
+     * URLs adicionais para
+     * Walled Garden.
+     */
+    walledGardenUrls:
+      listFromEnv(
+        process.env
+          .MIKROTIK_WALLED_GARDEN_URLS
+      ),
+
+
+    /*
+     * Permitir HTTP no Walled Garden.
+     */
+    walledGardenAllowHttp:
+      boolFromEnv(
+        process.env
+          .MIKROTIK_WALLED_GARDEN_ALLOW_HTTP,
         true
       ),
 
-    walledGardenUrls:
-      listFromEnv(process.env.MIKROTIK_WALLED_GARDEN_URLS),
 
-    walledGardenAllowHttp:
-      boolFromEnv(process.env.MIKROTIK_WALLED_GARDEN_ALLOW_HTTP, true),
-
+    /*
+     * Timeout das chamadas REST.
+     *
+     * 15000 ms = 15 segundos.
+     */
     timeoutMs:
-      Number(process.env.MIKROTIK_TIMEOUT_MS || 15000)
+      Number(
+        process.env
+          .MIKROTIK_TIMEOUT_MS ||
+        15000
+      )
   },
 
-  payment: {
-    mode:
-      process.env.PAYMENT_MODE ||
-      (isProduction ? 'live' : 'mock'),
 
+  /*
+   * =====================================
+   * PAGAMENTOS
+   * =====================================
+   */
+  payment: {
+
+    /*
+     * live ou mock.
+     */
+    mode:
+      process.env
+        .PAYMENT_MODE ||
+      (
+        isProduction
+          ? 'live'
+          : 'mock'
+      ),
+
+
+    /*
+     * Aprovação automática
+     * somente para ambiente mock.
+     */
     mockAutoApprove:
       boolFromEnv(
-        process.env.PAYMENT_MOCK_AUTO_APPROVE,
+        process.env
+          .PAYMENT_MOCK_AUTO_APPROVE,
         !isProduction
       ),
 
-    mockDelayMs:
-      Number(process.env.PAYMENT_MOCK_DELAY_MS || 5000),
 
+    /*
+     * Tempo para aprovação mock.
+     */
+    mockDelayMs:
+      Number(
+        process.env
+          .PAYMENT_MOCK_DELAY_MS ||
+        5000
+      ),
+
+
+    /*
+     * =================================
+     * M-PESA
+     * =================================
+     */
     mpesa: {
+
       apiUrl:
         process.env.APIMPESA ||
         process.env.MPESA_API_URL ||
         '',
 
+
       timeoutMs:
-        Number(process.env.MPESA_TIMEOUT_MS || 45000),
+        Number(
+          process.env
+            .MPESA_TIMEOUT_MS ||
+          45000
+        ),
+
 
       msisdnFormat:
-        process.env.MPESA_MSISDN_FORMAT ||
+        process.env
+          .MPESA_MSISDN_FORMAT ||
         'local',
 
+
       msisdnPrefix:
-        process.env.MPESA_MSISDN_PREFIX || '258',
+        process.env
+          .MPESA_MSISDN_PREFIX ||
+        '258',
+
 
       apiKey:
-        process.env.MPESA_API_KEY || '',
+        process.env
+          .MPESA_API_KEY ||
+        '',
+
 
       publicKey:
-        process.env.MPESA_PUBLIC_KEY || '',
+        process.env
+          .MPESA_PUBLIC_KEY ||
+        '',
+
 
       serviceProviderCode:
-        process.env.MPESA_SERVICE_PROVIDER_CODE || '',
+        process.env
+          .MPESA_SERVICE_PROVIDER_CODE ||
+        '',
+
 
       origin:
-        process.env.MPESA_ORIGIN ||
+        process.env
+          .MPESA_ORIGIN ||
         'developer.mpesa.vm.co.mz'
     },
 
+
+    /*
+     * =================================
+     * E-MOLA
+     * =================================
+     */
     emola: {
+
       enabled:
-        boolFromEnv(process.env.EMOLA_ENABLED, false),
+        boolFromEnv(
+          process.env
+            .EMOLA_ENABLED,
+          false
+        ),
+
 
       apiUrl:
-        process.env.EMOLA_API_URL || '',
+        process.env
+          .EMOLA_API_URL ||
+        '',
+
 
       timeoutMs:
-        Number(process.env.EMOLA_TIMEOUT_MS || 45000),
+        Number(
+          process.env
+            .EMOLA_TIMEOUT_MS ||
+          45000
+        ),
+
 
       msisdnPrefix:
-        process.env.EMOLA_MSISDN_PREFIX || '258',
+        process.env
+          .EMOLA_MSISDN_PREFIX ||
+        '258',
+
 
       channelId:
-        process.env.EMOLA_CHANNEL_ID || '',
+        process.env
+          .EMOLA_CHANNEL_ID ||
+        '',
+
 
       password:
-        process.env.EMOLA_PASSWORD || '',
+        process.env
+          .EMOLA_PASSWORD ||
+        '',
+
 
       serviceCode:
-        process.env.EMOLA_SERVICE_CODE || ''
+        process.env
+          .EMOLA_SERVICE_CODE ||
+        ''
     }
   }
 };

@@ -157,7 +157,8 @@ const [vouchers] =
 
      ORDER BY v.id ASC
 
-     LIMIT ${limit}`
+     LIMIT ${limit}`,
+    params
   );
 
 

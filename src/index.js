@@ -11,12 +11,24 @@ import ordersRouter from './routes/orders.js';
 import paymentsRouter from './routes/payments.js';
 import adminRouter from './routes/admin.js';
 
+import {
+  syncPendingVouchers
+} from './services/voucherSyncService.js';
+
+import {
+  refillVoucherStock
+} from './services/voucherStockService.js';
+
 const app = express();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const workspaceRoot = path.resolve(__dirname, '..', '..');
+const workspaceRoot = path.resolve(
+  __dirname,
+  '..',
+  '..'
+);
 
 const distPath = path.join(
   workspaceRoot,
@@ -34,12 +46,6 @@ const mikrotikPath = path.join(
 |--------------------------------------------------------------------------
 | CORS
 |--------------------------------------------------------------------------
-|
-| Permite:
-| - Frontend local Vite na porta 5173
-| - Frontend local Vite na porta 5174
-| - Domínios definidos em CORS_ORIGINS
-|
 */
 
 const allowedOrigins = [
@@ -48,7 +54,10 @@ const allowedOrigins = [
   ...(env.cors?.origins || [])
 ];
 
-console.log('Origens permitidas pelo CORS:', allowedOrigins);
+console.log(
+  'Origens permitidas pelo CORS:',
+  allowedOrigins
+);
 
 app.use(
   cors({
@@ -56,28 +65,54 @@ app.use(
 
       /*
        * Requisições sem Origin:
-       * Postman, curl, chamadas server-to-server, etc.
+       * curl, Postman, server-to-server etc.
        */
       if (!origin) {
-        return callback(null, true);
-      }
-
-      if (isLocalDevelopmentOrigin(origin)) {
-        return callback(null, true);
-      }
-
-      /*
-       * Permite tudo caso tenha *
-       */
-      if (allowedOrigins.includes('*')) {
-        return callback(null, true);
+        return callback(
+          null,
+          true
+        );
       }
 
       /*
-       * Verifica se a origem está autorizada
+       * Frontend local durante desenvolvimento.
        */
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
+      if (
+        isLocalDevelopmentOrigin(
+          origin
+        )
+      ) {
+        return callback(
+          null,
+          true
+        );
+      }
+
+      /*
+       * Permite tudo caso CORS_ORIGINS
+       * contenha "*".
+       */
+      if (
+        allowedOrigins.includes('*')
+      ) {
+        return callback(
+          null,
+          true
+        );
+      }
+
+      /*
+       * Origem explicitamente permitida.
+       */
+      if (
+        allowedOrigins.includes(
+          origin
+        )
+      ) {
+        return callback(
+          null,
+          true
+        );
       }
 
       const error = new Error(
@@ -86,7 +121,9 @@ app.use(
 
       error.status = 403;
 
-      return callback(error);
+      return callback(
+        error
+      );
     },
 
     credentials: true,
@@ -133,15 +170,17 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-app.get('/', (req, res) => {
+app.get(
+  '/',
+  (req, res) => {
 
-  res.json({
-    ok: true,
-    name: 'Eyazs Hotspot API',
-    health: '/api/health'
-  });
-
-});
+    res.json({
+      ok: true,
+      name: 'Eyazs Hotspot API',
+      health: '/api/health'
+    });
+  }
+);
 
 
 /*
@@ -150,18 +189,38 @@ app.get('/', (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.get('/api/health', (req, res) => {
+app.get(
+  '/api/health',
+  (req, res) => {
 
-  res.json({
-    ok: true,
-    config: {
-      mpesaMsisdnFormat: env.payment.mpesa.msisdnFormat,
-      allowExistingDbVouchers: env.mikrotik.allowExistingDbVouchers,
-      autoLoginViaRest: env.mikrotik.autoLoginViaRest
-    }
-  });
+    res.json({
+      ok: true,
 
-});
+      config: {
+        paymentMode:
+          env.payment.mode,
+
+        mpesaMsisdnFormat:
+          env.payment.mpesa.msisdnFormat,
+
+        mikrotikSyncEnabled:
+          env.mikrotik.syncEnabled,
+
+        autoLoginViaRest:
+          env.mikrotik.autoLoginViaRest,
+
+        allowExistingDbVouchers:
+          env.mikrotik.allowExistingDbVouchers,
+
+        voucherAutoSync:
+          env.voucherSync.enabled,
+
+        voucherSyncIntervalMs:
+          env.voucherSync.intervalMs
+      }
+    });
+  }
+);
 
 
 /*
@@ -170,14 +229,19 @@ app.get('/api/health', (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.get('/api/public-config', (req, res) => {
+app.get(
+  '/api/public-config',
+  (req, res) => {
 
-  res.json({
-    mikrotikLoginUrl: env.mikrotik.loginUrl,
-    paymentMode: env.payment.mode
-  });
+    res.json({
+      mikrotikLoginUrl:
+        env.mikrotik.loginUrl,
 
-});
+      paymentMode:
+        env.payment.mode
+    });
+  }
+);
 
 
 /*
@@ -213,30 +277,52 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-app.get('/hotspot/login.html', async (req, res, next) => {
-  try {
-    const template = await fs.readFile(
-      path.join(mikrotikPath, 'login.html'),
-      'utf8'
-    );
-    const html = template.replaceAll(
-      '__PORTAL_PUBLIC_URL__',
-      env.portal.publicUrl
-    );
+app.get(
+  '/hotspot/login.html',
+  async (
+    req,
+    res,
+    next
+  ) => {
 
-    res.setHeader(
-      'Cache-Control',
-      'no-store, no-cache, must-revalidate, proxy-revalidate'
-    );
-    res.type('html').send(html);
-  } catch (error) {
-    next(error);
+    try {
+
+      const template =
+        await fs.readFile(
+          path.join(
+            mikrotikPath,
+            'login.html'
+          ),
+          'utf8'
+        );
+
+      const html =
+        template.replaceAll(
+          '__PORTAL_PUBLIC_URL__',
+          env.portal.publicUrl
+        );
+
+      res.setHeader(
+        'Cache-Control',
+        'no-store, no-cache, must-revalidate, proxy-revalidate'
+      );
+
+      res
+        .type('html')
+        .send(html);
+
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
+
 
 app.use(
   '/hotspot',
-  express.static(mikrotikPath)
+  express.static(
+    mikrotikPath
+  )
 );
 
 
@@ -247,7 +333,9 @@ app.use(
 */
 
 app.use(
-  express.static(distPath)
+  express.static(
+    distPath
+  )
 );
 
 
@@ -257,33 +345,41 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-app.get('*', (req, res, next) => {
+app.get(
+  '*',
+  (req, res, next) => {
 
-  /*
-   * Não intercepta rotas da API.
-   */
-  if (req.path.startsWith('/api')) {
-    return next();
-  }
-
-  res.sendFile(
-    path.join(distPath, 'index.html'),
-    (error) => {
-
-      if (error) {
-
-        res
-          .status(404)
-          .send(
-            'Frontend ainda nao foi compilado. Rode npm run build ou use npm run dev.'
-          );
-
-      }
-
+    /*
+     * Não interceptar rotas /api.
+     */
+    if (
+      req.path.startsWith(
+        '/api'
+      )
+    ) {
+      return next();
     }
-  );
 
-});
+    res.sendFile(
+      path.join(
+        distPath,
+        'index.html'
+      ),
+
+      (error) => {
+
+        if (error) {
+
+          res
+            .status(404)
+            .send(
+              'Frontend ainda nao foi compilado. Rode npm run build ou use npm run dev.'
+            );
+        }
+      }
+    );
+  }
+);
 
 
 /*
@@ -292,34 +388,199 @@ app.get('*', (req, res, next) => {
 |--------------------------------------------------------------------------
 */
 
-app.use((error, req, res, next) => {
+app.use(
+  (
+    error,
+    req,
+    res,
+    next
+  ) => {
 
-  console.error('Erro:', error);
+    console.error(
+      'Erro:',
+      error
+    );
+
+    /*
+     * JSON inválido.
+     */
+    if (
+      error.type ===
+      'entity.parse.failed'
+    ) {
+
+      return res
+        .status(400)
+        .json({
+          message:
+            'JSON invalido no pedido.'
+        });
+    }
+
+    /*
+     * Outros erros.
+     */
+    return res
+      .status(
+        error.status ||
+        500
+      )
+      .json({
+        message:
+          error.status
+            ? error.message
+            : 'Erro interno no servidor.'
+      });
+  }
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| SINCRONIZAÇÃO AUTOMÁTICA DE VOUCHERS
+|--------------------------------------------------------------------------
+*/
+
+function startVoucherAutoSync() {
 
   /*
-   * JSON inválido
+   * Localmente normalmente ficará false.
    */
-  if (error.type === 'entity.parse.failed') {
+  if (
+    !env.voucherSync.enabled
+  ) {
 
-    return res.status(400).json({
-      message: 'JSON invalido no pedido.'
-    });
+    console.log(
+      '[VOUCHER-SYNC] Sincronização automática desativada.'
+    );
 
+    return;
   }
 
-  /*
-   * Outros erros
-   */
-  return res
-    .status(error.status || 500)
-    .json({
-      message:
-        error.status
-          ? error.message
-          : 'Erro interno no servidor.'
-    });
 
-});
+  /*
+   * Não adianta tentar sincronizar
+   * se a integração MikroTik estiver desligada.
+   */
+  if (
+    !env.mikrotik.syncEnabled
+  ) {
+
+    console.log(
+      '[VOUCHER-SYNC] Não iniciado porque MIKROTIK_SYNC_ENABLED=false.'
+    );
+
+    return;
+  }
+
+
+  /*
+   * Evita intervalo inválido.
+   *
+   * Mínimo de 10 segundos.
+   */
+  const intervalMs =
+    Math.max(
+      Number(
+        env.voucherSync.intervalMs
+      ) || 60000,
+      10000
+    );
+
+
+  console.log(
+    `[VOUCHER-SYNC] Automático ativo. Intervalo: ${intervalMs}ms.`
+  );
+
+
+  /*
+   * Função executada a cada ciclo.
+   */
+  const runSync =
+    async () => {
+
+      try {
+
+        const result =
+          await syncPendingVouchers();
+
+        /*
+         * Só mostra resumo quando
+         * encontrou alguma coisa.
+         */
+        if (
+          result &&
+          Number(result.found) > 0
+        ) {
+
+          console.log(
+            `[VOUCHER-SYNC] Resultado: encontrados=${result.found}, sincronizados=${result.synced}, falhas=${result.failed}.`
+          );
+        }
+
+      } catch (error) {
+
+        console.error(
+          '[VOUCHER-SYNC] Erro no ciclo automático:',
+          error.message
+        );
+      }
+    };
+
+
+  /*
+   * Executa uma vez imediatamente
+   * quando o backend inicia.
+   */
+  runSync();
+
+
+  /*
+   * Depois continua automaticamente.
+   */
+  setInterval(
+    runSync,
+    intervalMs
+  );
+}
+
+function startVoucherAutoStock() {
+  if (!env.voucherStock?.enabled) {
+    console.log('[STOCK] Reposição automática desativada.');
+    return;
+  }
+
+  if (!env.mikrotik.syncEnabled) {
+    console.log(
+      '[STOCK] Não iniciado porque MIKROTIK_SYNC_ENABLED=false.'
+    );
+    return;
+  }
+
+  const intervalMs = Math.max(
+    Number(env.voucherStock.intervalMs) || 60000,
+    30000
+  );
+
+  console.log(
+    `[STOCK] Reposição automática ativa. Intervalo: ${intervalMs}ms.`
+  );
+
+  const runStock = async () => {
+    try {
+      await refillVoucherStock();
+    } catch (error) {
+      console.error(
+        '[STOCK] Erro no ciclo automático:',
+        error.message
+      );
+    }
+  };
+
+  setTimeout(runStock, 15000);
+
+  setInterval(runStock, intervalMs);
+}
 
 
 /*
@@ -328,20 +589,38 @@ app.use((error, req, res, next) => {
 |--------------------------------------------------------------------------
 */
 
+
 app.listen(
   env.port,
   '0.0.0.0',
   () => {
-
     console.log(
       `API pronta na porta ${env.port}`
     );
 
+    startVoucherAutoSync();
+    startVoucherAutoStock();
   }
 );
 
-function isLocalDevelopmentOrigin(origin) {
-  if (env.production) return false;
 
-  return /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d+$/i.test(origin);
+/*
+|--------------------------------------------------------------------------
+| AUXILIAR - ORIGENS LOCAIS
+|--------------------------------------------------------------------------
+*/
+
+function isLocalDevelopmentOrigin(
+  origin
+) {
+
+  if (
+    env.production
+  ) {
+    return false;
+  }
+
+  return /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d+$/i.test(
+    origin
+  );
 }
