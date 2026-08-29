@@ -150,6 +150,18 @@ export const env = {
         true
       ),
 
+    blockPaymentIfOffline:
+      boolFromEnv(
+        process.env.MIKROTIK_BLOCK_PAYMENT_IF_OFFLINE,
+        false
+      ),
+
+    autoLoginViaRest:
+      boolFromEnv(
+        process.env.MIKROTIK_AUTO_LOGIN_VIA_REST,
+        false
+      ),
+
     walledGardenUrls:
       listFromEnv(process.env.MIKROTIK_WALLED_GARDEN_URLS),
 

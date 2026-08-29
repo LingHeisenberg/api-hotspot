@@ -40,7 +40,7 @@ router.post('/', async (req, res, next) => {
     });
   }
 
-  if (env.payment.mode === 'live' && env.mikrotik.syncEnabled) {
+  if (env.payment.mode === 'live' && env.mikrotik.syncEnabled && env.mikrotik.blockPaymentIfOffline) {
     const readiness = await checkHotspotReadiness();
 
     if (!readiness.ok) {
@@ -192,7 +192,11 @@ router.get('/:reference/status', async (req, res, next) => {
     const voucher = rows[0];
     let activation = null;
 
-    if ((voucher.status === 'pago' || voucher.status === 'usado') && !voucher.mikrotik_login_at) {
+    if (
+      env.mikrotik.autoLoginViaRest &&
+      (voucher.status === 'pago' || voucher.status === 'usado') &&
+      !voucher.mikrotik_login_at
+    ) {
       activation = await activateHotspotClient({
         username: voucher.codigo_voucher,
         password: voucher.senha_voucher,
@@ -211,6 +215,10 @@ router.get('/:reference/status', async (req, res, next) => {
 
     if (voucher.status === 'pago' || voucher.status === 'usado') {
       const activated = Boolean(activation?.ok || voucher.mikrotik_login_at);
+      const hasHotspotClient = Boolean(voucher.ip_cliente || voucher.mac_cliente);
+      const browserLoginMessage = hasHotspotClient
+        ? 'A enviar o voucher para o login do Hotspot.'
+        : 'Compra feita sem IP/MAC do Hotspot.';
 
       if (voucher.status === 'pago' && activated) {
         await pool.execute(
@@ -228,13 +236,11 @@ router.get('/:reference/status', async (req, res, next) => {
         mikrotikLoginUrl: env.mikrotik.loginUrl,
         access: {
           activated,
-          autoLoginAvailable: Boolean(voucher.ip_cliente || voucher.mac_cliente),
+          autoLoginAvailable: hasHotspotClient,
           message:
             activation?.message ||
             voucher.mikrotik_login_message ||
-            (voucher.ip_cliente || voucher.mac_cliente
-              ? 'Autenticacao no Hotspot em processamento.'
-              : 'Compra feita sem IP/MAC do Hotspot.')
+            browserLoginMessage
         }
       });
     }
