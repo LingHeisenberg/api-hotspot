@@ -86,6 +86,7 @@ async function startMpesaPayment({ amount, phone, reference }) {
         paymentStatus: status.kind,
         reason: status.kind,
         message: apiMessage || status.message || `M-Pesa recusou o pedido. HTTP ${response.status}.`,
+        httpStatus: response.status,
         raw: data,
         requestPayload: payload
       };
@@ -96,6 +97,7 @@ async function startMpesaPayment({ amount, phone, reference }) {
       provider: 'mpesa',
       paymentStatus: status.kind,
       message: apiMessage || status.message,
+      httpStatus: response.status,
       raw: data,
       requestPayload: payload
     };
@@ -241,7 +243,18 @@ function classifyPaymentResponse(data, httpStatus, label) {
   ];
   const paidMarkers = ['INS-0', 'SUCCESS', 'SUCCESSFUL', 'PAID', 'COMPLETED', 'CONFIRMED', 'APROVADO', 'PAGO'];
   const pendingMarkers = ['PENDING', 'PROCESSING', 'ACCEPTED', 'IN_PROGRESS', 'AGUARDANDO'];
-  const failedMarkers = ['FAILED', 'ERROR', 'REJECTED', 'DECLINED', 'CANCELLED', 'CANCELED', 'TIMEOUT', 'INS-'];
+  const failedMarkers = [
+    'FAILED',
+    'ERROR',
+    'ERRO',
+    'REJECTED',
+    'DECLINED',
+    'CANCELLED',
+    'CANCELED',
+    'TIMEOUT',
+    'INVALID',
+    'INS-'
+  ];
 
   if (insufficientMarkers.some((marker) => joined.includes(marker))) {
     return { kind: 'insufficient_funds', message: INSUFFICIENT_FUNDS_MESSAGE };

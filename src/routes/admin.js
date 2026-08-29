@@ -87,6 +87,27 @@ router.post('/vouchers/generate', async (req, res, next) => {
   }
 });
 
+router.get('/payment-events', async (req, res, next) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit || 10), 1), 50);
+    const [events] = await pool.query(
+      `SELECT id, provider, reference, status, payload, created_at
+       FROM payment_events
+       ORDER BY id DESC
+       LIMIT ${limit}`
+    );
+
+    res.json({
+      events: events.map((event) => ({
+        ...event,
+        payload: redactPaymentPayload(parsePaymentPayload(event.payload))
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/export.csv', async (req, res, next) => {
   try {
     const inicio = String(req.query.inicio || '').slice(0, 10) || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
@@ -137,6 +158,61 @@ function toCsvLine(values) {
       return `"${text.replace(/"/g, '""')}"`;
     })
     .join(',');
+}
+
+function parsePaymentPayload(payload) {
+  if (!payload) return null;
+
+  if (typeof payload === 'object') {
+    return payload;
+  }
+
+  try {
+    return JSON.parse(payload);
+  } catch {
+    return String(payload);
+  }
+}
+
+function redactPaymentPayload(value) {
+  if (Array.isArray(value)) {
+    return value.map(redactPaymentPayload);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => {
+      if (isSensitivePaymentKey(key)) {
+        return [key, maskPaymentValue(item)];
+      }
+
+      return [key, redactPaymentPayload(item)];
+    })
+  );
+}
+
+function isSensitivePaymentKey(key) {
+  return ['msisdn', 'phone', 'telefone', 'telefone_cliente', 'password', 'senha'].includes(
+    String(key || '').toLowerCase()
+  );
+}
+
+function maskPaymentValue(value) {
+  const text = String(value || '');
+  const digits = text.replace(/\D/g, '');
+
+  if (digits.length >= 7) {
+    return `${digits.slice(0, 3)}***${digits.slice(-2)}`;
+  }
+
+  if (text.length > 4) {
+    return `${text.slice(0, 2)}***${text.slice(-1)}`;
+  }
+
+  return '***';
 }
 
 export default router;

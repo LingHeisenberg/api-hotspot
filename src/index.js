@@ -153,7 +153,12 @@ app.get('/', (req, res) => {
 app.get('/api/health', (req, res) => {
 
   res.json({
-    ok: true
+    ok: true,
+    config: {
+      mpesaMsisdnFormat: env.payment.mpesa.msisdnFormat,
+      allowExistingDbVouchers: env.mikrotik.allowExistingDbVouchers,
+      autoLoginViaRest: env.mikrotik.autoLoginViaRest
+    }
   });
 
 });
