@@ -517,6 +517,14 @@ function parseJson(text) {
 }
 
 function extractMikrotikError(data, text, status) {
+  if (status === 401) {
+    return 'MikroTik recusou as credenciais REST. Verifique MIKROTIK_API_USER e MIKROTIK_API_PASS no Railway.';
+  }
+
+  if (status === 403) {
+    return 'Usuario MikroTik sem permissao para esta operacao REST. Verifique as permissoes do grupo no RouterOS.';
+  }
+
   if (data && typeof data === 'object') {
     return data.detail || data.error || data.message || `MikroTik recusou o usuário. HTTP ${status}.`;
   }
