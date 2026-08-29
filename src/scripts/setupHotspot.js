@@ -4,6 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   ensureWalledGardenAccess,
+  getMikrotikRestUrl,
+  requestMikrotik,
   uploadRouterFileContents
 } from '../services/mikrotikService.js';
 
@@ -54,6 +56,8 @@ if (flashUpload.ok) {
   console.log(`FALHA flash/hotspot/login.html: ${flashUpload.message}`);
 }
 
+await replaceLegacyPortalReferences(portalUrl.href);
+
 console.log('Setup Hotspot concluido.');
 
 function getWalledGardenTargets() {
@@ -79,4 +83,62 @@ function getWalledGardenTargets() {
 
 function addTarget(unique, hostname, port) {
   unique.set(`${hostname}:${port}`, { hostname, port });
+}
+
+async function replaceLegacyPortalReferences(portalHref) {
+  const files = await requestMikrotik(getMikrotikRestUrl('/file/print'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      '.proplist': '.id,name,contents'
+    })
+  });
+
+  if (!files.ok || !Array.isArray(files.data)) {
+    console.log(`FALHA limpeza legado: ${files.message}`);
+    return;
+  }
+
+  const legacyNeedles = [
+    'https://sixtelecom.eyazs.com',
+    'http://sixtelecom.eyazs.com',
+    'sixtelecom.eyazs.com',
+    'http://seu_servidor:3010',
+    'https://seu_servidor:3010',
+    'seu_servidor:3010',
+    'http://192.168.1.5:3010',
+    'https://192.168.1.5:3010'
+  ];
+
+  for (const file of files.data) {
+    const contents = String(file.contents || '');
+
+    if (!contents || !legacyNeedles.some((needle) => contents.includes(needle))) {
+      continue;
+    }
+
+    const nextContents = legacyNeedles.reduce(
+      (current, needle) => current.replaceAll(needle, portalHref.replace(/\/$/, '')),
+      contents
+    );
+
+    const saved = await requestMikrotik(getMikrotikRestUrl('/file/set'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        '.id': file['.id'],
+        contents: nextContents
+      })
+    });
+
+    if (saved.ok) {
+      console.log(`OK legado removido: ${file.name}`);
+    } else {
+      console.log(`FALHA legado ${file.name}: ${saved.message}`);
+    }
+  }
 }

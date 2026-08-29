@@ -18,6 +18,7 @@ const result = {
     hosts: 0,
     walledGardenRules: 0,
     loginFile: false,
+    loginFiles: [],
     warnings: []
   }
 };
@@ -84,7 +85,15 @@ async function count(path, key) {
 }
 
 async function checkLoginFile() {
-  const response = await requestMikrotik(getMikrotikRestUrl('/file'), { method: 'GET' });
+  const response = await requestMikrotik(getMikrotikRestUrl('/file/print'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      '.proplist': 'name,contents'
+    })
+  });
 
   if (!response.ok) {
     result.mikrotik.warnings.push(`/file: ${response.message}`);
@@ -92,13 +101,33 @@ async function checkLoginFile() {
   }
 
   const files = Array.isArray(response.data) ? response.data : [];
-  result.mikrotik.loginFile = files.some((file) => {
+  result.mikrotik.loginFiles = files
+    .filter((file) => String(file.name || '').endsWith('login.html'))
+    .map((file) => {
+      const contents = String(file.contents || '');
+
+      return {
+        name: file.name,
+        hasHotspotPortal: contents.includes('hotspot.eyazsnetpay.com'),
+        hasLegacySixtelecom: contents.includes('sixtelecom.eyazs.com')
+      };
+    });
+
+  result.mikrotik.loginFile = result.mikrotik.loginFiles.some((file) => {
     const name = String(file.name || '');
     return name === 'hotspot/login.html' || name === 'flash/hotspot/login.html' || name.endsWith('/hotspot/login.html');
   });
 
   if (!result.mikrotik.loginFile) {
     result.mikrotik.warnings.push('login.html do portal nao foi encontrado nos arquivos do MikroTik.');
+  }
+
+  const legacyFiles = result.mikrotik.loginFiles.filter((file) => file.hasLegacySixtelecom);
+
+  if (legacyFiles.length > 0) {
+    result.mikrotik.warnings.push(
+      `Arquivos login.html ainda apontam para sixtelecom: ${legacyFiles.map((file) => file.name).join(', ')}.`
+    );
   }
 }
 

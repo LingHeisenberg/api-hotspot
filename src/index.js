@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -206,6 +207,27 @@ app.use(
 | ARQUIVOS DO HOTSPOT
 |--------------------------------------------------------------------------
 */
+
+app.get('/hotspot/login.html', async (req, res, next) => {
+  try {
+    const template = await fs.readFile(
+      path.join(mikrotikPath, 'login.html'),
+      'utf8'
+    );
+    const html = template.replaceAll(
+      '__PORTAL_PUBLIC_URL__',
+      env.portal.publicUrl
+    );
+
+    res.setHeader(
+      'Cache-Control',
+      'no-store, no-cache, must-revalidate, proxy-revalidate'
+    );
+    res.type('html').send(html);
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.use(
   '/hotspot',

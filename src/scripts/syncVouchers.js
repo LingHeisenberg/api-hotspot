@@ -5,9 +5,25 @@ import { durationToRouterTime } from '../utils/mikrotikTime.js';
 const args = parseArgs(process.argv.slice(2));
 const params = [];
 const filters = ["v.status <> 'cancelado'"];
+const validStatuses = new Set(['disponivel', 'pendente', 'pago', 'usado', 'cancelado']);
+
+if (args.force && !args.status && !args.code && !args.reference) {
+  console.error('Por seguranca, use --force apenas com --status=disponivel, --code=... ou --reference=...');
+  process.exit(1);
+}
 
 if (!args.force) {
   filters.push('v.mikrotik_synced_at IS NULL');
+}
+
+if (args.status) {
+  if (!validStatuses.has(args.status)) {
+    console.error(`Status invalido: ${args.status}`);
+    process.exit(1);
+  }
+
+  filters.push('v.status = ?');
+  params.push(args.status);
 }
 
 if (args.code) {
@@ -83,6 +99,11 @@ function parseArgs(values) {
 
     if (match) {
       acc[match[1]] = match[2];
+      return acc;
+    }
+
+    if (item.startsWith('--')) {
+      acc[item.slice(2)] = true;
     }
 
     return acc;

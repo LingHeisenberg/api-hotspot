@@ -216,6 +216,18 @@ export async function checkHotspotReadiness() {
   const servers = await requestMikrotik(getMikrotikRestUrl('/ip/hotspot'), { method: 'GET' });
 
   if (!servers.ok) {
+    const hosts = await requestMikrotik(getMikrotikRestUrl('/ip/hotspot/host'), { method: 'GET' });
+
+    if (hosts.ok && Array.isArray(hosts.data)) {
+      return {
+        ok: true,
+        users: Array.isArray(users.data) ? users.data.length : 0,
+        hotspotServers: null,
+        hosts: hosts.data.length,
+        warning: `Servidor Hotspot nao confirmou em /ip/hotspot, mas /ip/hotspot/host respondeu. Detalhe: ${servers.message}`
+      };
+    }
+
     return {
       ok: false,
       message: `Nao foi possivel confirmar o servidor Hotspot: ${servers.message}`
@@ -344,9 +356,10 @@ export async function uploadRouterFileContents({ dstPath = 'hotspot/login.html',
   }
 
   const files = await requestMikrotik(getMikrotikRestUrl('/file'), { method: 'GET' });
-  const match = Array.isArray(files.data)
-    ? files.data.find((file) => file.name === dstPath || file.name === `/${dstPath}` || file.name?.endsWith(`/${dstPath}`))
-    : null;
+  const fileList = Array.isArray(files.data) ? files.data : [];
+  const match =
+    fileList.find((file) => file.name === dstPath || file.name === `/${dstPath}`) ||
+    null;
   const targets = match?.['.id'] ? [...new Set([match['.id'], dstPath].filter(Boolean))] : [];
   const url = getMikrotikRestUrl('/file/set');
   let lastError = 'Nao foi possivel atualizar o arquivo no MikroTik.';
