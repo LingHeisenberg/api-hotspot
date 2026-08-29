@@ -276,40 +276,18 @@ function createWaitingUrl({ reference, ip, mac, linkorig, loginUrl, chapId, chap
 }
 
 async function selectVoucherForSale(connection, pacoteId) {
-  const syncedOnly = env.mikrotik.syncEnabled;
-  const [syncedVouchers] = await connection.execute(
-    `SELECT id, codigo_voucher, mikrotik_synced_at
+  const [vouchers] = await connection.execute(
+    `SELECT
+       id,
+       codigo_voucher,
+       senha_voucher,
+       mikrotik_user_id,
+       mikrotik_sync_status,
+       mikrotik_sync_em
      FROM vouchers
      WHERE pacote_id = ?
        AND status = 'disponivel'
-       ${syncedOnly ? 'AND mikrotik_synced_at IS NOT NULL' : ''}
-     ORDER BY id ASC
-     LIMIT 1
-     FOR UPDATE`,
-    [pacoteId]
-  );
-
-  if (syncedVouchers.length > 0) {
-    return {
-      voucher: syncedVouchers[0],
-      assumedExisting: false,
-      requiresSynced: syncedOnly
-    };
-  }
-
-  if (syncedOnly && !env.mikrotik.allowExistingDbVouchers) {
-    return {
-      voucher: null,
-      assumedExisting: false,
-      requiresSynced: true
-    };
-  }
-
-  const [availableVouchers] = await connection.execute(
-    `SELECT id, codigo_voucher, mikrotik_synced_at
-     FROM vouchers
-     WHERE pacote_id = ?
-       AND status = 'disponivel'
+       AND mikrotik_sync_status = 'sincronizado'
      ORDER BY id ASC
      LIMIT 1
      FOR UPDATE`,
@@ -317,9 +295,9 @@ async function selectVoucherForSale(connection, pacoteId) {
   );
 
   return {
-    voucher: availableVouchers[0] || null,
-    assumedExisting: Boolean(syncedOnly && availableVouchers[0] && !availableVouchers[0].mikrotik_synced_at),
-    requiresSynced: false
+    voucher: vouchers[0] || null,
+    assumedExisting: false,
+    requiresSynced: true
   };
 }
 
