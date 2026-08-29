@@ -162,6 +162,12 @@ export const env = {
         false
       ),
 
+    allowExistingDbVouchers:
+      boolFromEnv(
+        process.env.MIKROTIK_ALLOW_EXISTING_DB_VOUCHERS,
+        true
+      ),
+
     walledGardenUrls:
       listFromEnv(process.env.MIKROTIK_WALLED_GARDEN_URLS),
 
