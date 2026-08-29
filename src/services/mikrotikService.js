@@ -1,17 +1,219 @@
 import { env } from '../config/env.js';
 
-export async function createHotspotUser({ username, password, profile, comment, limitUptime }) {
+const MIKROTIK_SYNC_MAX_ATTEMPTS = 3;
+const MIKROTIK_SYNC_RETRY_DELAY_MS = 800;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Garante que um voucher existe no MikroTik.
+ *
+ * - Se não existir, cria.
+ * - Se já existir, atualiza.
+ * - Confirma depois se realmente existe na RB.
+ * - Tenta novamente caso haja falha temporária.
+ */
+export async function syncVoucherToMikrotik({
+  username,
+  password,
+  profile = 'default',
+  comment = 'Eyazs Hotspot - voucher sincronizado automaticamente',
+  limitUptime = '',
+  maxAttempts = MIKROTIK_SYNC_MAX_ATTEMPTS
+}) {
+  const normalizedUsername = String(username || '').trim();
+  const normalizedPassword = String(password || '').trim();
+
+  if (!normalizedUsername || !normalizedPassword) {
+    return {
+      ok: false,
+      synced: false,
+      message:
+        'Voucher sem username ou password para sincronizar com o MikroTik.'
+    };
+  }
+
   if (!env.mikrotik.syncEnabled) {
     return {
       ok: false,
-      message: 'Sincronização com MikroTik está desativada. Ative MIKROTIK_SYNC_ENABLED=true.'
+      synced: false,
+      skipped: true,
+      message:
+        'Sincronização com MikroTik está desativada. Ative MIKROTIK_SYNC_ENABLED=true.'
     };
   }
 
   if (!env.mikrotik.restUrl || !env.mikrotik.apiUser) {
     return {
       ok: false,
-      message: 'Configuração REST do MikroTik incompleta. Verifique MIKROTIK_REST_URL e MIKROTIK_API_USER.'
+      synced: false,
+      message:
+        'Configuração REST do MikroTik incompleta. Verifique MIKROTIK_REST_URL e MIKROTIK_API_USER.'
+    };
+  }
+
+  const attempts = Math.max(
+    1,
+    Math.min(Number(maxAttempts) || 1, 5)
+  );
+
+  let lastResult = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const result = await createHotspotUser({
+      username: normalizedUsername,
+      password: normalizedPassword,
+      profile,
+      comment,
+      limitUptime
+    });
+
+    if (result.ok) {
+      const verification =
+        await findHotspotUserByName(normalizedUsername);
+
+      if (verification.ok && verification.user) {
+        return {
+          ok: true,
+          synced: true,
+          createdOrUpdated: true,
+          attempt,
+          id:
+            verification.user['.id'] ||
+            result.id ||
+            '',
+          user: verification.user,
+          message:
+            `Voucher ${normalizedUsername} sincronizado com o MikroTik.`
+        };
+      }
+
+      lastResult = {
+        ok: false,
+        synced: false,
+        message:
+          `O MikroTik aceitou ${normalizedUsername}, mas a verificação posterior não encontrou o utilizador.`,
+        raw: result.raw
+      };
+    } else {
+      lastResult = {
+        ...result,
+        synced: false
+      };
+    }
+
+    if (attempt < attempts) {
+      await sleep(
+        MIKROTIK_SYNC_RETRY_DELAY_MS * attempt
+      );
+    }
+  }
+
+  return {
+    ok: false,
+    synced: false,
+    attempts,
+    message:
+      lastResult?.message ||
+      `Não foi possível sincronizar ${normalizedUsername} com o MikroTik.`,
+    raw: lastResult?.raw
+  };
+}
+
+/**
+ * Sincroniza vários vouchers.
+ */
+export async function syncVoucherBatchToMikrotik(
+  vouchers = []
+) {
+  const results = [];
+
+  for (const voucher of vouchers) {
+    const username =
+      voucher.username ||
+      voucher.codigo_voucher ||
+      voucher.codigo ||
+      voucher.name;
+
+    const password =
+      voucher.password ||
+      voucher.senha_voucher ||
+      voucher.senha;
+
+    const result =
+      await syncVoucherToMikrotik({
+        username,
+        password,
+        profile:
+          voucher.profile || 'default',
+        comment:
+          voucher.comment ||
+          'Eyazs Hotspot - voucher sincronizado automaticamente',
+        limitUptime:
+          voucher.limitUptime ||
+          voucher['limit-uptime'] ||
+          ''
+      });
+
+    results.push({
+      username,
+      ...result
+    });
+  }
+
+  return {
+    ok: results.every((item) => item.ok),
+
+    total: results.length,
+
+    sincronizados:
+      results.filter((item) => item.ok).length,
+
+    falhas:
+      results.filter((item) => !item.ok).length,
+
+    results
+  };
+}
+
+////DIVISAO
+
+export async function createHotspotUser({
+  username,
+  password,
+  profile = 'default',
+  comment = 'Eyazs Hotspot',
+  limitUptime = ''
+}) {
+  username = String(username || '').trim();
+  password = String(password || '').trim();
+
+  if (!username || !password) {
+    return {
+      ok: false,
+      message:
+        'Username e password são obrigatórios para criar o utilizador Hotspot.'
+    };
+  }
+
+  if (!env.mikrotik.syncEnabled) {
+    return {
+      ok: false,
+      message:
+        'Sincronização com MikroTik está desativada. Ative MIKROTIK_SYNC_ENABLED=true.'
+    };
+  }
+
+  if (
+    !env.mikrotik.restUrl ||
+    !env.mikrotik.apiUser
+  ) {
+    return {
+      ok: false,
+      message:
+        'Configuração REST do MikroTik incompleta. Verifique MIKROTIK_REST_URL e MIKROTIK_API_USER.'
     };
   }
 
@@ -27,35 +229,148 @@ export async function createHotspotUser({ username, password, profile, comment, 
   }
 
   if (env.mikrotik.hotspotServer) {
-    payload.server = env.mikrotik.hotspotServer;
+    payload.server =
+      env.mikrotik.hotspotServer;
   }
 
-  const existing = await findHotspotUserByName(username);
+  const existing =
+    await findHotspotUserByName(username);
 
-  if (existing.ok && existing.user?.['.id']) {
-    return updateHotspotUser(existing.user['.id'], payload);
+  /*
+   * Se já existe na RB,
+   * atualiza em vez de criar duplicado.
+   */
+  if (
+    existing.ok &&
+    existing.user?.['.id']
+  ) {
+    return updateHotspotUser(
+      existing.user['.id'],
+      payload
+    );
   }
 
-  return saveHotspotUser(payload, 'PUT', env.mikrotik.restUrl);
+  /*
+   * Caso não exista, cria.
+   */
+  return saveHotspotUser(
+    payload,
+    'PUT',
+    env.mikrotik.restUrl
+  );
 }
 
-export async function findHotspotUserByName(username) {
-  if (!env.mikrotik.syncEnabled || !env.mikrotik.restUrl || !env.mikrotik.apiUser) {
-    return { ok: false, user: null };
+export async function findHotspotUserByName(
+  username
+) {
+  if (
+    !env.mikrotik.syncEnabled ||
+    !env.mikrotik.restUrl ||
+    !env.mikrotik.apiUser
+  ) {
+    return {
+      ok: false,
+      user: null
+    };
   }
 
-  const response = await requestMikrotik(env.mikrotik.restUrl, { method: 'GET' });
+  const normalizedUsername =
+    String(username || '').trim();
 
-  if (!response.ok || !Array.isArray(response.data)) {
-    return { ok: false, user: null, message: response.message };
+  if (!normalizedUsername) {
+    return {
+      ok: false,
+      user: null,
+      message:
+        'Username do Hotspot em falta.'
+    };
+  }
+
+  /*
+   * Primeiro tenta procurar diretamente
+   * pelo nome.
+   */
+  let filteredUrl =
+    env.mikrotik.restUrl;
+
+  try {
+    const url =
+      new URL(env.mikrotik.restUrl);
+
+    url.searchParams.set(
+      'name',
+      normalizedUsername
+    );
+
+    filteredUrl = url.toString();
+  } catch {
+    /*
+     * Se houver problema,
+     * usa o endpoint normal abaixo.
+     */
+  }
+
+  const filteredResponse =
+    await requestMikrotik(
+      filteredUrl,
+      {
+        method: 'GET'
+      }
+    );
+
+  if (
+    filteredResponse.ok &&
+    Array.isArray(filteredResponse.data)
+  ) {
+    const directUser =
+      filteredResponse.data.find(
+        (user) =>
+          user.name === normalizedUsername
+      ) || null;
+
+    if (directUser) {
+      return {
+        ok: true,
+        user: directUser
+      };
+    }
+  }
+
+  /*
+   * Fallback:
+   * lista todos e procura localmente.
+   */
+  const response =
+    await requestMikrotik(
+      env.mikrotik.restUrl,
+      {
+        method: 'GET'
+      }
+    );
+
+  if (
+    !response.ok ||
+    !Array.isArray(response.data)
+  ) {
+    return {
+      ok: false,
+      user: null,
+      message:
+        response.message ||
+        filteredResponse.message
+    };
   }
 
   return {
     ok: true,
-    user: response.data.find((user) => user.name === username) || null
+
+    user:
+      response.data.find(
+        (user) =>
+          user.name === normalizedUsername
+      ) || null
   };
 }
-
 export async function upsertHotspotUserProfile({ name, sessionTimeout, sharedUsers = '1', rateLimit = '' }) {
   if (!env.mikrotik.syncEnabled || !env.mikrotik.restUrl || !env.mikrotik.apiUser) {
     return {
