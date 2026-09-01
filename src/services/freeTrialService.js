@@ -381,14 +381,20 @@ function safeMinutes() {
 }
 
 function getTrialDate() {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
+  const parts = new Intl.DateTimeFormat('en', {
     timeZone: env.freeTrial.timeZone || 'Africa/Maputo',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit'
-  });
+  }).formatToParts(new Date());
 
-  return formatter.format(new Date());
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value])
+  );
+
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function httpError(status, message, reason) {
