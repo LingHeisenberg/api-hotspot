@@ -297,18 +297,27 @@ async function createUniqueCredentials(connection) {
     const username = `${prefix}${crypto.randomInt(100000, 999999)}`;
     const password = String(crypto.randomInt(1000, 9999));
 
-    const [rows] = await connection.execute(
-      `SELECT codigo_voucher
-       FROM (
-         SELECT codigo_voucher FROM vouchers WHERE codigo_voucher = ?
-         UNION
-         SELECT codigo_voucher FROM free_trials WHERE codigo_voucher = ?
-       ) AS existing_codes
+    const [voucherRows] = await connection.execute(
+      `SELECT id
+       FROM vouchers
+       WHERE codigo_voucher = ?
        LIMIT 1`,
-      [username, username]
+      [username]
     );
 
-    if (rows.length === 0) {
+    if (voucherRows.length > 0) {
+      continue;
+    }
+
+    const [trialRows] = await connection.execute(
+      `SELECT id
+       FROM free_trials
+       WHERE codigo_voucher = ?
+       LIMIT 1`,
+      [username]
+    );
+
+    if (trialRows.length === 0) {
       return { username, password };
     }
   }
