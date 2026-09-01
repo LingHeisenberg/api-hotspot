@@ -123,7 +123,7 @@ export async function startFreeTrial(payload = {}) {
     }
 
     const credentials = await createUniqueCredentials(connection);
-    const limitUptime = `${env.freeTrial.minutes}m`;
+    const limitUptime =`${safeMinutes()}m30s`;
     const sync = await syncVoucherToMikrotik({
       username: credentials.username,
       password: credentials.password,
@@ -278,19 +278,32 @@ async function readEligibility(connection, clientKey, trialDate) {
 }
 
 async function ensureFreeTrialProfile() {
-  const profile = String(env.freeTrial.profile || 'default').trim();
+  const profile = String(
+    env.freeTrial.profile || 'default'
+  ).trim();
 
   if (!profile || profile === 'default') {
-    return { ok: true };
+    return {
+      ok: true
+    };
   }
+
+  const minutes = safeMinutes();
 
   return upsertHotspotUserProfile({
     name: profile,
-    sessionTimeout: `${env.freeTrial.minutes}m`,
-    sharedUsers: '1'
+    sessionTimeout: `${minutes}m`,
+    sharedUsers: '1',
+
+    // O teste grátis não deve guardar
+    // autenticação automática por MAC.
+    addMacCookie: false,
+
+    // O retorno ao portal será tratado
+    // pelo captive portal do MikroTik.
+    advertise: false
   });
 }
-
 async function createUniqueCredentials(connection) {
   const prefix = sanitizePrefix(env.freeTrial.prefix);
 

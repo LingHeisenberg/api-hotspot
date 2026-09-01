@@ -371,43 +371,135 @@ export async function findHotspotUserByName(
       ) || null
   };
 }
-export async function upsertHotspotUserProfile({ name, sessionTimeout, sharedUsers = '1', rateLimit = '' }) {
-  if (!env.mikrotik.syncEnabled || !env.mikrotik.restUrl || !env.mikrotik.apiUser) {
+export async function upsertHotspotUserProfile({
+  name,
+  sessionTimeout,
+  sharedUsers = '1',
+  rateLimit = '',
+  addMacCookie = true,
+  advertise = false,
+  advertiseUrl = '',
+  advertiseInterval = '',
+  advertiseTimeout = ''
+}) {
+  if (
+    !env.mikrotik.syncEnabled ||
+    !env.mikrotik.restUrl ||
+    !env.mikrotik.apiUser
+  ) {
     return {
       ok: false,
       message: 'Configuracao REST do MikroTik incompleta.'
     };
   }
 
-  const profileUrl = getMikrotikRestUrl('/ip/hotspot/user/profile');
-  const profiles = await requestMikrotik(profileUrl, { method: 'GET' });
+  const profileUrl =
+    getMikrotikRestUrl(
+      '/ip/hotspot/user/profile'
+    );
 
-  if (!profiles.ok || !Array.isArray(profiles.data)) {
+  const profiles =
+    await requestMikrotik(
+      profileUrl,
+      {
+        method: 'GET'
+      }
+    );
+
+  if (
+    !profiles.ok ||
+    !Array.isArray(profiles.data)
+  ) {
     return {
       ok: false,
-      message: profiles.message || 'Nao foi possivel listar perfis Hotspot.'
+      message:
+        profiles.message ||
+        'Nao foi possivel listar perfis Hotspot.'
     };
   }
 
   const payload = {
-    name,
-    'shared-users': String(sharedUsers),
-    'add-mac-cookie': 'yes'
-  };
+  name,
+  'shared-users': String(sharedUsers),
+  'add-mac-cookie': addMacCookie ? 'yes' : 'no'
+};
 
-  if (sessionTimeout) payload['session-timeout'] = sessionTimeout;
-  if (rateLimit) payload['rate-limit'] = rateLimit;
+  if (sessionTimeout) {
+    payload['session-timeout'] =
+      sessionTimeout;
+  }
 
-  const existing = profiles.data.find((profile) => profile.name === name);
-  const method = existing?.['.id'] ? 'PATCH' : 'PUT';
-  const url = existing?.['.id'] ? `${profileUrl.replace(/\/+$/, '')}/${existing['.id']}` : profileUrl;
-  const saved = await requestMikrotik(url, {
-    method,
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
+  if (rateLimit) {
+    payload['rate-limit'] =
+      rateLimit;
+  }
+
+  /*
+   * Redirecionamento do teste grátis.
+   */
+  payload.advertise =
+    advertise ? 'yes' : 'no';
+
+  if (
+    advertise &&
+    advertiseUrl
+  ) {
+    payload['advertise-url'] =
+      advertiseUrl;
+  }
+
+  if (
+    advertise &&
+    advertiseInterval
+  ) {
+    payload['advertise-interval'] =
+      advertiseInterval;
+  }
+
+  if (
+    advertise &&
+    advertiseTimeout
+  ) {
+    payload['advertise-timeout'] =
+      advertiseTimeout;
+  }
+
+  const existing =
+    profiles.data.find(
+      (profile) =>
+        profile.name === name
+    );
+
+  const method =
+    existing?.['.id']
+      ? 'PATCH'
+      : 'PUT';
+
+  const url =
+    existing?.['.id']
+      ? `${profileUrl.replace(
+          /\/+$/,
+          ''
+        )}/${existing['.id']}`
+      : profileUrl;
+
+  const saved =
+    await requestMikrotik(
+      url,
+      {
+        method,
+
+        headers: {
+          'Content-Type':
+            'application/json'
+        },
+
+        body:
+          JSON.stringify(
+            payload
+          )
+      }
+    );
 
   if (!saved.ok) {
     return {
@@ -419,9 +511,14 @@ export async function upsertHotspotUserProfile({ name, sessionTimeout, sharedUse
 
   return {
     ok: true,
-    id: saved.data?.['.id'] || existing?.['.id'] || '',
-    created: method === 'PUT',
-    raw: saved.data
+    id:
+      saved.data?.['.id'] ||
+      existing?.['.id'] ||
+      '',
+    created:
+      method === 'PUT',
+    raw:
+      saved.data
   };
 }
 
