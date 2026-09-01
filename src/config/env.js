@@ -269,7 +269,11 @@ export const env = {
 
     prefix:
       process.env.FREE_TRIAL_PREFIX ||
-      'FREE'
+      'FREE',
+
+    timeZone:
+      process.env.FREE_TRIAL_TIME_ZONE ||
+      'Africa/Maputo'
   },
 
 

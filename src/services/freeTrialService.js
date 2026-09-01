@@ -11,6 +11,7 @@ const DEFAULT_LINK_ORIG = 'https://www.google.com/';
 
 export async function getFreeTrialStatus(payload = {}) {
   const context = normalizeContext(payload);
+  const trialDate = getTrialDate();
 
   if (!env.freeTrial.enabled) {
     return {
@@ -32,7 +33,7 @@ export async function getFreeTrialStatus(payload = {}) {
 
   try {
     await expireOldTrials(connection, context.clientKey);
-    const eligibility = await readEligibility(connection, context.clientKey);
+    const eligibility = await readEligibility(connection, context.clientKey, trialDate);
 
     return {
       enabled: true,
@@ -56,6 +57,7 @@ export async function getFreeTrialStatus(payload = {}) {
 
 export async function startFreeTrial(payload = {}) {
   const context = normalizeContext(payload);
+  const trialDate = getTrialDate();
 
   if (!env.freeTrial.enabled) {
     throw httpError(403, 'Teste gratis indisponivel no momento.', 'free_trial_disabled');
@@ -87,7 +89,7 @@ export async function startFreeTrial(payload = {}) {
     }
 
     await expireOldTrials(connection, context.clientKey);
-    const eligibility = await readEligibility(connection, context.clientKey);
+    const eligibility = await readEligibility(connection, context.clientKey, trialDate);
 
     if (eligibility.activeTrial) {
       return toClientTrial(eligibility.activeTrial, context);
@@ -161,7 +163,7 @@ export async function startFreeTrial(payload = {}) {
          ?,
          'ativo',
          ?,
-         CURDATE(),
+         ?,
          DATE_ADD(NOW(), INTERVAL ${safeMinutes()} MINUTE)
        )`,
       [
@@ -172,7 +174,8 @@ export async function startFreeTrial(payload = {}) {
         credentials.username,
         credentials.password,
         sync.id || null,
-        `Teste gratis ativo por ${env.freeTrial.minutes} minutos.`
+        `Teste gratis ativo por ${env.freeTrial.minutes} minutos.`,
+        trialDate
       ]
     );
 
@@ -243,7 +246,7 @@ async function expireOldTrials(connection, clientKey) {
   );
 }
 
-async function readEligibility(connection, clientKey) {
+async function readEligibility(connection, clientKey, trialDate) {
   const [activeRows] = await connection.execute(
     `SELECT *,
             TIMESTAMPDIFF(SECOND, NOW(), expires_at) AS remaining_seconds
@@ -259,11 +262,11 @@ async function readEligibility(connection, clientKey) {
   const [usageRows] = await connection.execute(
     `SELECT
        COUNT(*) AS total_used,
-       SUM(trial_date = CURDATE()) AS used_today
+       SUM(trial_date = ?) AS used_today
      FROM free_trials
      WHERE client_key = ?
        AND status <> 'erro'`,
-    [clientKey]
+    [trialDate, clientKey]
   );
 
   return {
@@ -375,6 +378,17 @@ function createLockName(clientKey) {
 
 function safeMinutes() {
   return Math.max(1, Math.min(Number(env.freeTrial.minutes) || 15, 1440));
+}
+
+function getTrialDate() {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: env.freeTrial.timeZone || 'Africa/Maputo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+
+  return formatter.format(new Date());
 }
 
 function httpError(status, message, reason) {
