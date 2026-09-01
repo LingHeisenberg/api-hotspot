@@ -3,6 +3,7 @@ import { env } from '../config/env.js';
 import { pool } from '../config/db.js';
 import { sanitizeHotspotValue } from '../utils/validators.js';
 import {
+  activateHotspotClient,
   syncVoucherToMikrotik,
   upsertHotspotUserProfile
 } from './mikrotikService.js';
@@ -92,7 +93,7 @@ export async function startFreeTrial(payload = {}) {
     const eligibility = await readEligibility(connection, context.clientKey, trialDate);
 
     if (eligibility.activeTrial) {
-      return toClientTrial(eligibility.activeTrial, context);
+      return activateAndFormatTrial(eligibility.activeTrial, context, connection);
     }
 
     if (eligibility.usedToday) {
@@ -188,7 +189,7 @@ export async function startFreeTrial(payload = {}) {
       [result.insertId]
     );
 
-    return toClientTrial(rows[0], context);
+    return activateAndFormatTrial(rows[0], context, connection);
   } finally {
     try {
       await connection.execute('SELECT RELEASE_LOCK(?)', [lockName]);
@@ -346,6 +347,61 @@ function toClientTrial(row, context) {
       activated: false,
       autoLoginAvailable: Boolean(context.ip || context.mac),
       message: 'Teste gratis criado. A entrar no Hotspot.'
+    }
+  };
+}
+
+async function activateAndFormatTrial(row, context, connection) {
+  const trial = toClientTrial(row, context);
+
+  if (!env.mikrotik.autoLoginViaRest) {
+    return trial;
+  }
+
+  if (!context.ip && !context.mac) {
+    return {
+      ...trial,
+      access: {
+        ...trial.access,
+        activated: false,
+        autoLoginAvailable: false,
+        message: 'Teste gratis criado, mas sem IP/MAC para autenticar automaticamente.'
+      }
+    };
+  }
+
+  const activation = await activateHotspotClient({
+    username: row.codigo_voucher,
+    password: row.senha_voucher,
+    ip: context.ip || row.ip_cliente,
+    mac: context.mac || row.mac_cliente
+  });
+
+  const message =
+    activation.message ||
+    (
+      activation.ok
+        ? 'Cliente autenticado no Hotspot.'
+        : 'Teste gratis criado, mas o login automatico no Hotspot falhou.'
+    );
+
+  try {
+    await connection.execute(
+      `UPDATE free_trials
+       SET status_mensagem = ?
+       WHERE id = ?`,
+      [String(message).slice(0, 255), row.id]
+    );
+  } catch {
+    // A falha ao gravar a mensagem nao deve bloquear o acesso.
+  }
+
+  return {
+    ...trial,
+    access: {
+      activated: Boolean(activation.ok),
+      autoLoginAvailable: true,
+      message
     }
   };
 }
