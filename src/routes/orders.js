@@ -94,6 +94,9 @@ router.post('/', async (req, res, next) => {
            status_mensagem = ?,
            reservado_em = NOW(),
            mikrotik_synced_at = IF(?, COALESCE(mikrotik_synced_at, NOW()), mikrotik_synced_at),
+           mikrotik_sync_status = IF(?, 'sincronizado', mikrotik_sync_status),
+           mikrotik_sync_erro = IF(?, NULL, mikrotik_sync_erro),
+           mikrotik_sync_em = IF(?, COALESCE(mikrotik_sync_em, NOW()), mikrotik_sync_em),
            mikrotik_error = IF(?, NULL, mikrotik_error)
        WHERE id = ?`,
       [
@@ -104,6 +107,9 @@ router.post('/', async (req, res, next) => {
         linkorig,
         provider,
         'Aguardando confirmacao do pagamento.',
+        voucherSelection.assumedExisting ? 1 : 0,
+        voucherSelection.assumedExisting ? 1 : 0,
+        voucherSelection.assumedExisting ? 1 : 0,
         voucherSelection.assumedExisting ? 1 : 0,
         voucherSelection.assumedExisting ? 1 : 0,
         voucherId
@@ -294,10 +300,43 @@ async function selectVoucherForSale(connection, pacoteId) {
     [pacoteId]
   );
 
+  if (vouchers[0]) {
+    return {
+      voucher: vouchers[0],
+      assumedExisting: false,
+      requiresSynced: true
+    };
+  }
+
+  if (!env.mikrotik.allowExistingDbVouchers) {
+    return {
+      voucher: null,
+      assumedExisting: false,
+      requiresSynced: true
+    };
+  }
+
+  const [legacyVouchers] = await connection.execute(
+    `SELECT
+       id,
+       codigo_voucher,
+       senha_voucher,
+       mikrotik_user_id,
+       mikrotik_sync_status,
+       mikrotik_sync_em
+     FROM vouchers
+     WHERE pacote_id = ?
+       AND status = 'disponivel'
+     ORDER BY id ASC
+     LIMIT 1
+     FOR UPDATE`,
+    [pacoteId]
+  );
+
   return {
-    voucher: vouchers[0] || null,
-    assumedExisting: false,
-    requiresSynced: true
+    voucher: legacyVouchers[0] || null,
+    assumedExisting: Boolean(legacyVouchers[0]),
+    requiresSynced: false
   };
 }
 

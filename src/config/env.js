@@ -237,6 +237,41 @@ export const env = {
       `http://localhost:${process.env.PORT || 8000}/`
   },
 
+  freeTrial: {
+    enabled:
+      boolFromEnv(
+        process.env.FREE_TRIAL_ENABLED,
+        true
+      ),
+
+    minutes:
+      Math.max(
+        1,
+        Number(
+          process.env.FREE_TRIAL_MINUTES ||
+          15
+        )
+      ),
+
+    maxDays:
+      Math.max(
+        1,
+        Number(
+          process.env.FREE_TRIAL_MAX_DAYS ||
+          5
+        )
+      ),
+
+    profile:
+      process.env.FREE_TRIAL_PROFILE ||
+      process.env.MIKROTIK_FREE_TRIAL_PROFILE ||
+      'default',
+
+    prefix:
+      process.env.FREE_TRIAL_PREFIX ||
+      'FREE'
+  },
+
 
   /*
    * MySQL

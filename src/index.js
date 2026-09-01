@@ -10,6 +10,7 @@ import plansRouter from './routes/plans.js';
 import ordersRouter from './routes/orders.js';
 import paymentsRouter from './routes/payments.js';
 import adminRouter from './routes/admin.js';
+import freeTrialsRouter from './routes/freeTrials.js';
 
 import {
   syncPendingVouchers
@@ -216,7 +217,16 @@ app.get(
           env.voucherSync.enabled,
 
         voucherSyncIntervalMs:
-          env.voucherSync.intervalMs
+          env.voucherSync.intervalMs,
+
+        freeTrialEnabled:
+          env.freeTrial.enabled,
+
+        freeTrialMinutes:
+          env.freeTrial.minutes,
+
+        freeTrialMaxDays:
+          env.freeTrial.maxDays
       }
     });
   }
@@ -238,7 +248,18 @@ app.get(
         env.mikrotik.loginUrl,
 
       paymentMode:
-        env.payment.mode
+        env.payment.mode,
+
+      freeTrial: {
+        enabled:
+          env.freeTrial.enabled,
+
+        minutes:
+          env.freeTrial.minutes,
+
+        maxDays:
+          env.freeTrial.maxDays
+      }
     });
   }
 );
@@ -263,6 +284,11 @@ app.use(
 app.use(
   '/api/payments',
   paymentsRouter
+);
+
+app.use(
+  '/api/free-trials',
+  freeTrialsRouter
 );
 
 app.use(

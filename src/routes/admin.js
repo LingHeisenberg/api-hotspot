@@ -40,6 +40,14 @@ router.get('/summary', async (req, res, next) => {
        FROM vouchers`
     );
 
+    const [trialRows] = await pool.execute(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(status = 'ativo' AND expires_at > NOW()) AS ativos,
+         SUM(trial_date = CURDATE()) AS hoje
+       FROM free_trials`
+    );
+
     const [history] = await pool.execute(
       `SELECT
          v.codigo_voucher,
@@ -64,7 +72,10 @@ router.get('/summary', async (req, res, next) => {
         vendas: totalVendas,
         conversao: totalVouchers > 0 ? Number(((totalVendas / totalVouchers) * 100).toFixed(1)) : 0,
         disponiveis: Number(stockRows[0]?.disponiveis || 0),
-        pendentes: Number(stockRows[0]?.pendentes || 0)
+        pendentes: Number(stockRows[0]?.pendentes || 0),
+        testesGratis: Number(trialRows[0]?.total || 0),
+        testesGratisAtivos: Number(trialRows[0]?.ativos || 0),
+        testesGratisHoje: Number(trialRows[0]?.hoje || 0)
       },
       history
     });

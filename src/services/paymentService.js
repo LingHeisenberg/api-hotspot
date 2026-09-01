@@ -606,48 +606,55 @@ function formatMpesaNumber(phone) {
       digits.substring(2);
   }
 
+  const local =
+    digits.length === 9
+      ? digits
+      : digits.length > 9
+        ? digits.slice(-9)
+        : '';
+
+  if (!/^(84|85)\d{7}$/.test(local)) {
+    return null;
+  }
+
+  const format =
+    String(
+      env.payment.mpesa.msisdnFormat ||
+      'local'
+    )
+      .toLowerCase()
+      .trim();
+
+  if (
+    [
+      'international',
+      'internacional',
+      'country',
+      'prefix',
+      'e164'
+    ].includes(format)
+  ) {
+    return `${env.payment.mpesa.msisdnPrefix || '258'}${local}`;
+  }
+
+  return local;
+
 
   /**
    * Já possui 258
    *
    * 258851904232
    */
-  if (
-    digits.startsWith('258') &&
-    digits.length === 12
-  ) {
-    return digits;
-  }
-
-
   /**
    * Número local
    *
    * 851904232
    */
-  if (
-    digits.length === 9
-  ) {
-    return `258${digits}`;
-  }
-
-
   /**
    * Caso venha com alguma
    * informação adicional,
    * usamos os últimos 9 números.
    */
-  if (
-    digits.length > 9
-  ) {
-    const local =
-      digits.slice(-9);
-
-    return `258${local}`;
-  }
-
-
-  return null;
 }
 
 
