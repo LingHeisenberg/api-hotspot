@@ -289,25 +289,15 @@ export const env = {
    */
   admin: {
 
+    // Optional compatibility credentials. New admin authentication uses
+    // database accounts and JWT_ACCESS_SECRET instead.
     password:
-      isProduction
-        ? required(
-            'ADMIN_PASSWORD'
-          )
-        : (
-            process.env.ADMIN_PASSWORD ||
-            'admin'
-          ),
+      process.env.ADMIN_PASSWORD ||
+      (isProduction ? '' : 'admin'),
 
     token:
-      isProduction
-        ? required(
-            'ADMIN_TOKEN'
-          )
-        : (
-            process.env.ADMIN_TOKEN ||
-            'dev-admin-token'
-          )
+      process.env.ADMIN_TOKEN ||
+      (isProduction ? '' : 'dev-admin-token')
   },
 
 

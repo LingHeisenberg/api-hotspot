@@ -5,7 +5,8 @@ import { durationToRouterTime } from '../utils/mikrotikTime.js';
 let syncRunning = false;
 
 export async function syncPendingVouchers({
-  limit = 100
+  limit = 100,
+  voucherId = null
 } = {}) {
   /*
    * Impede duas sincronizações simultâneas
@@ -57,10 +58,12 @@ export async function syncPendingVouchers({
 
        WHERE v.status <> 'cancelado'
          AND v.mikrotik_sync_status IN ('pendente', 'erro')
+         ${voucherId === null ? '' : 'AND v.id = ?'}
 
        ORDER BY v.id ASC
 
-       LIMIT ${safeLimit}`
+       LIMIT ${safeLimit}`,
+      voucherId === null ? [] : [voucherId]
     );
 
     if (vouchers.length === 0) {

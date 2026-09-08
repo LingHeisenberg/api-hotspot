@@ -9,7 +9,8 @@ import { env } from './config/env.js';
 import plansRouter from './routes/plans.js';
 import ordersRouter from './routes/orders.js';
 import paymentsRouter from './routes/payments.js';
-import adminRouter from './routes/admin.js';
+import legacyAdminRouter from './routes/admin.js';
+import { adminRouter } from './admin/router.js';
 import freeTrialsRouter from './routes/freeTrials.js';
 
 import {
@@ -50,10 +51,12 @@ const mikrotikPath = path.join(
 */
 
 const allowedOrigins = [
+  'https://hotspot.eyazsnetpay.com',
+  process.env.ADMIN_FRONTEND_URL || 'https://admin.eyazsnetpay.com',
   'http://localhost:5173',
   'http://localhost:5174',
   ...(env.cors?.origins || [])
-];
+].map((origin) => String(origin).replace(/\/+$/, ''));
 
 console.log(
   'Origens permitidas pelo CORS:',
@@ -82,19 +85,6 @@ app.use(
         isLocalDevelopmentOrigin(
           origin
         )
-      ) {
-        return callback(
-          null,
-          true
-        );
-      }
-
-      /*
-       * Permite tudo caso CORS_ORIGINS
-       * contenha "*".
-       */
-      if (
-        allowedOrigins.includes('*')
       ) {
         return callback(
           null,
@@ -293,7 +283,16 @@ app.use(
 
 app.use(
   '/api/admin',
-  adminRouter
+  (req, res, next) => {
+    // Opt-in, narrowly scoped transition for the existing portal admin only.
+    const legacyPath = ['/login','/summary','/payment-events','/export.csv'].includes(req.path);
+    const legacyGeneration = req.path === '/vouchers/generate' && req.headers.authorization === `Bearer ${env.admin.token}`;
+    const legacyEnabled = process.env.ADMIN_LEGACY_ENABLED !== 'false';
+    if (legacyEnabled && env.admin.token && env.admin.password && (legacyPath || legacyGeneration)) {
+      return legacyAdminRouter(req, res, next);
+    }
+    return adminRouter(req, res, next);
+  }
 );
 
 
