@@ -136,15 +136,27 @@ router.post('/', async (req, res, next) => {
     await recordPaymentEvent(payment.provider, reference, payment.paymentStatus || 'accepted', payment);
 
     if (payment.paymentStatus === 'paid') {
-      await pool.execute(
-        `UPDATE vouchers
-         SET status = 'pago',
-             status_mensagem = ?,
-             pago_em = NOW()
-         WHERE transacao_id = ? AND status = 'pendente'`,
-        [payment.message || 'Pagamento confirmado.', reference]
-      );
-    }
+  await pool.execute(
+    `UPDATE vouchers v
+     INNER JOIN pacotes p
+       ON p.id = v.pacote_id
+     SET
+       v.status = 'pago',
+       v.status_mensagem = ?,
+       v.pago_em = NOW(),
+       v.expira_em = DATE_ADD(
+         NOW(),
+         INTERVAL p.duracao_minutos MINUTE
+       ),
+       v.expirado_em = NULL
+     WHERE v.transacao_id = ?
+       AND v.status = 'pendente'`,
+    [
+      payment.message || 'Pagamento confirmado.',
+      reference
+    ]
+  );
+}
 
     if (env.payment.mode === 'mock' && env.payment.mockAutoApprove) {
       scheduleMockApproval(reference);
@@ -177,21 +189,26 @@ router.get('/:reference/status', async (req, res, next) => {
   try {
     const reference = sanitizeHotspotValue(req.params.reference);
     const [rows] = await pool.execute(
-      `SELECT
-         id,
-         status,
-         codigo_voucher,
-         senha_voucher,
-         status_mensagem,
-         ip_cliente,
-         mac_cliente,
-         mikrotik_login_at,
-         mikrotik_login_message
-       FROM vouchers
-       WHERE transacao_id = ?
-       LIMIT 1`,
-      [reference]
-    );
+  `SELECT
+     id,
+     status,
+     codigo_voucher,
+     senha_voucher,
+     status_mensagem,
+     ip_cliente,
+     mac_cliente,
+     mikrotik_login_at,
+     mikrotik_login_message,
+     expira_em,
+     (
+       expira_em IS NOT NULL
+       AND expira_em <= NOW()
+     ) AS expirado_por_tempo
+   FROM vouchers
+   WHERE transacao_id = ?
+   LIMIT 1`,
+  [reference]
+);
 
     if (rows.length === 0) {
       return res.status(404).json({ status: 'nao_encontrado', message: 'Transacao invalida.' });
@@ -199,6 +216,14 @@ router.get('/:reference/status', async (req, res, next) => {
 
     const voucher = rows[0];
     let activation = null;
+
+    if (Number(voucher.expirado_por_tempo) === 1) {
+  return res.json({
+    status: 'expirado',
+    message: 'A validade deste pacote terminou.',
+    expiraEm: voucher.expira_em
+  });
+}
 
     if (
       env.mikrotik.autoLoginViaRest &&
@@ -369,15 +394,27 @@ function scheduleMockApproval(reference) {
   setTimeout(async () => {
     try {
       await pool.execute(
-        `UPDATE vouchers
-         SET status = 'pago',
-             status_mensagem = 'Pagamento confirmado em modo de teste.',
-             pago_em = NOW()
-         WHERE transacao_id = ? AND status = 'pendente'`,
+        `UPDATE vouchers v
+         INNER JOIN pacotes p
+           ON p.id = v.pacote_id
+         SET
+           v.status = 'pago',
+           v.status_mensagem = 'Pagamento confirmado em modo de teste.',
+           v.pago_em = NOW(),
+           v.expira_em = DATE_ADD(
+             NOW(),
+             INTERVAL p.duracao_minutos MINUTE
+           ),
+           v.expirado_em = NULL
+         WHERE v.transacao_id = ?
+           AND v.status = 'pendente'`,
         [reference]
       );
     } catch (error) {
-      console.error('Mock payment approval failed:', error);
+      console.error(
+        'Mock payment approval failed:',
+        error
+      );
     }
   }, env.payment.mockDelayMs);
 }

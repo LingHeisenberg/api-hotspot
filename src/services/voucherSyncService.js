@@ -56,8 +56,8 @@ export async function syncPendingVouchers({
        JOIN pacotes p
          ON p.id = v.pacote_id
 
-       WHERE v.status <> 'cancelado'
-         AND v.mikrotik_sync_status IN ('pendente', 'erro')
+       WHERE v.status IN ('disponivel', 'pendente', 'pago', 'usado')
+          AND v.mikrotik_sync_status IN ('pendente', 'erro')
          ${voucherId === null ? '' : 'AND v.id = ?'}
 
        ORDER BY v.id ASC

@@ -371,6 +371,264 @@ export async function findHotspotUserByName(
       ) || null
   };
 }
+
+/**
+ * Desativa um utilizador/voucher Hotspot.
+ *
+ * O utilizador continua existente no MikroTik,
+ * mas deixa de poder autenticar.
+ */
+export async function disableHotspotUser(username) {
+  const normalizedUsername =
+    String(username || '').trim();
+
+  if (!normalizedUsername) {
+    return {
+      ok: false,
+      message: 'Username do Hotspot em falta.'
+    };
+  }
+
+  if (
+    !env.mikrotik.syncEnabled ||
+    !env.mikrotik.restUrl ||
+    !env.mikrotik.apiUser
+  ) {
+    return {
+      ok: false,
+      skipped: true,
+      message:
+        'Configuracao REST do MikroTik incompleta.'
+    };
+  }
+
+  const existing =
+    await findHotspotUserByName(
+      normalizedUsername
+    );
+
+  if (!existing.ok) {
+    return {
+      ok: false,
+      message:
+        existing.message ||
+        `Nao foi possivel localizar ${normalizedUsername} no MikroTik.`
+    };
+  }
+
+  /*
+   * Se já não existir no MikroTik,
+   * consideramos a expiração concluída.
+   */
+  if (!existing.user) {
+    return {
+      ok: true,
+      notFound: true,
+      message:
+        `Utilizador ${normalizedUsername} nao existe no MikroTik.`
+    };
+  }
+
+  const id =
+    existing.user['.id'];
+
+  if (!id) {
+    return {
+      ok: false,
+      message:
+        `Utilizador ${normalizedUsername} sem .id no MikroTik.`
+    };
+  }
+
+  /*
+   * Já está desativado.
+   */
+  if (
+    String(
+      existing.user.disabled || 'false'
+    ).toLowerCase() === 'true'
+  ) {
+    return {
+      ok: true,
+      alreadyDisabled: true,
+      id,
+      message:
+        `Utilizador ${normalizedUsername} ja estava desativado.`
+    };
+  }
+
+  const url =
+    `${env.mikrotik.restUrl.replace(
+      /\/+$/,
+      ''
+    )}/${id}`;
+
+  const response =
+    await requestMikrotik(
+      url,
+      {
+        method: 'PATCH',
+
+        headers: {
+          'Content-Type':
+            'application/json'
+        },
+
+        body:
+          JSON.stringify({
+            disabled: 'true'
+          })
+      }
+    );
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      id,
+      message:
+        response.message ||
+        `Falha ao desativar ${normalizedUsername}.`,
+      raw: response.raw
+    };
+  }
+
+  return {
+    ok: true,
+    id,
+    message:
+      `Utilizador ${normalizedUsername} desativado no MikroTik.`,
+    raw: response.data
+  };
+}
+
+/**
+ * Remove todas as sessoes Hotspot ativas
+ * pertencentes a um determinado voucher.
+ */
+export async function removeActiveHotspotSession(
+  username
+) {
+  const normalizedUsername =
+    String(username || '').trim();
+
+  if (!normalizedUsername) {
+    return {
+      ok: false,
+      message: 'Username do Hotspot em falta.'
+    };
+  }
+
+  if (
+    !env.mikrotik.syncEnabled ||
+    !env.mikrotik.restUrl ||
+    !env.mikrotik.apiUser
+  ) {
+    return {
+      ok: false,
+      skipped: true,
+      message:
+        'Configuracao REST do MikroTik incompleta.'
+    };
+  }
+
+  const activeUrl =
+    getMikrotikRestUrl(
+      '/ip/hotspot/active'
+    );
+
+  const response =
+    await requestMikrotik(
+      activeUrl,
+      {
+        method: 'GET'
+      }
+    );
+
+  if (
+    !response.ok ||
+    !Array.isArray(response.data)
+  ) {
+    return {
+      ok: false,
+      message:
+        response.message ||
+        'Nao foi possivel listar sessoes Hotspot.',
+      raw: response.raw
+    };
+  }
+
+  const sessions =
+    response.data.filter(
+      (session) =>
+        String(
+          session.user || ''
+        ).trim() === normalizedUsername
+    );
+
+  /*
+   * Não estar conectado não é erro.
+   */
+  if (sessions.length === 0) {
+    return {
+      ok: true,
+      removed: 0,
+      message:
+        `Nenhuma sessao ativa encontrada para ${normalizedUsername}.`
+    };
+  }
+
+  let removed = 0;
+  const errors = [];
+
+  for (const session of sessions) {
+    const id =
+      session['.id'];
+
+    if (!id) {
+      continue;
+    }
+
+    const removal =
+      await requestMikrotik(
+        `${activeUrl.replace(
+          /\/+$/,
+          ''
+        )}/${id}`,
+        {
+          method: 'DELETE'
+        }
+      );
+
+    if (removal.ok) {
+      removed += 1;
+    } else {
+      errors.push({
+        id,
+        message:
+          removal.message ||
+          'Falha ao remover sessao.'
+      });
+    }
+  }
+
+  if (errors.length > 0) {
+    return {
+      ok: false,
+      removed,
+      errors,
+      message:
+        `Algumas sessoes de ${normalizedUsername} nao foram removidas.`
+    };
+  }
+
+  return {
+    ok: true,
+    removed,
+    message:
+      `${removed} sessao(oes) de ${normalizedUsername} removida(s).`
+  };
+}
+
 export async function upsertHotspotUserProfile({
   name,
   sessionTimeout,

@@ -21,6 +21,10 @@ import {
   refillVoucherStock
 } from './services/voucherStockService.js';
 
+import {
+  expireVouchers
+} from './services/voucherExpirationService.js';
+
 const app = express();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -607,6 +611,70 @@ function startVoucherAutoStock() {
   setInterval(runStock, intervalMs);
 }
 
+function startVoucherExpiration() {
+  /**
+   * Verifica a cada 15 segundos.
+   *
+   * Assim um voucher que termina às 17:00
+   * será cortado normalmente entre
+   * 17:00:00 e 17:00:15.
+   */
+  if (!env.mikrotik.syncEnabled) {
+  console.log(
+    '[VOUCHER-EXPIRATION] Não iniciado porque MIKROTIK_SYNC_ENABLED=false.'
+  );
+
+  return;
+}
+  const intervalMs = 15000;
+
+  console.log(
+    `[VOUCHER-EXPIRATION] Automático ativo. Intervalo: ${intervalMs}ms.`
+  );
+
+  const runExpiration =
+    async () => {
+
+      try {
+
+        const result =
+          await expireVouchers();
+
+        if (
+          result &&
+          Number(result.found) > 0
+        ) {
+
+          console.log(
+            `[VOUCHER-EXPIRATION] encontrados=${result.found}, expirados=${result.expired}, falhas=${result.failed}.`
+          );
+        }
+
+      } catch (error) {
+
+        console.error(
+          '[VOUCHER-EXPIRATION] Erro no ciclo:',
+          error.message
+        );
+      }
+    };
+
+
+  /**
+   * Executa também quando o backend inicia.
+   *
+   * Isto é importante caso o Railway tenha
+   * ficado reiniciando durante a hora em que
+   * algum voucher expirou.
+   */
+  runExpiration();
+
+
+  setInterval(
+    runExpiration,
+    intervalMs
+  );
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -625,9 +693,9 @@ app.listen(
 
     startVoucherAutoSync();
     startVoucherAutoStock();
+    startVoucherExpiration();
   }
 );
-
 
 /*
 |--------------------------------------------------------------------------

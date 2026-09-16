@@ -19,22 +19,36 @@ router.post('/:provider/callback', async (req, res, next) => {
       return res.status(422).json({ status: 'erro', message: 'Referencia em falta.' });
     }
 
-    if (callback.success) {
-      const [result] = await pool.execute(
-        `UPDATE vouchers
-         SET status = 'pago',
-             status_mensagem = ?,
-             pago_em = NOW()
-         WHERE transacao_id = ? AND status = 'pendente'`,
-        [callback.message || 'Pagamento confirmado pela operadora.', callback.reference]
-      );
+  if (callback.success) {
+  const [result] = await pool.execute(
+    `UPDATE vouchers v
+     INNER JOIN pacotes p
+       ON p.id = v.pacote_id
+     SET
+       v.status = 'pago',
+       v.status_mensagem = ?,
+       v.pago_em = NOW(),
+       v.expira_em = DATE_ADD(
+         NOW(),
+         INTERVAL p.duracao_minutos MINUTE
+       ),
+       v.expirado_em = NULL
+     WHERE v.transacao_id = ?
+       AND v.status = 'pendente'`,
+    [
+      callback.message || 'Pagamento confirmado pela operadora.',
+      callback.reference
+    ]
+  );
 
-      return res.json({
-        status: result.affectedRows > 0 ? 'sucesso' : 'ignorado',
-        message: 'Callback de pagamento recebido.'
-      });
-    }
-
+  return res.json({
+    status:
+      result.affectedRows > 0
+        ? 'sucesso'
+        : 'ignorado',
+    message: 'Callback de pagamento recebido.'
+  });
+}
     if (callback.canceled) {
       await pool.execute(
         `UPDATE vouchers
