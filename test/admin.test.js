@@ -18,5 +18,6 @@ test('date ranges are bounded and return a half-open database interval', () => {
   assert.equal(result.end, '2026-09-09 00:00:00');
   assert.equal(result.timeZone, 'Africa/Maputo');
   assert.throws(() => dateRange({ from: '2026-09-08', to: '2026-09-01' }));
-  assert.throws(() => dateRange({ from: '2026-01-01', to: '2027-01-02' }));
+  assert.equal(dateRange({ from: '2026-01-01', to: '2027-01-02' }).end, '2027-01-03 00:00:00');
+  assert.throws(() => dateRange({ from: '2026-01-01', to: '2027-01-03' }));
 });

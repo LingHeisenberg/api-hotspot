@@ -9,7 +9,7 @@
   "scripts": {
     "admin:migrate": "node src/scripts/migrateAdmin.js",
     "admin:create": "node src/scripts/createAdmin.js",
-    "test": "node --test test/*.test.js",
+    "test": "node --test test",
     "dev": "node src/index.js",
     "start": "node src/index.js",
     "db:setup": "node src/scripts/setupDatabase.js",
